@@ -61,7 +61,7 @@ public class StarterBot2024Teleop extends OpMode
     private final double wristDownPosition = 0.0;
 
     private final int armHomePosition = 0;
-    private final int armIntakePosition = 9;
+    private final int armIntakePosition = 10;
     private final int armScorePosition = 550;
     private final int armShutdownThreshold = 5;
 
@@ -136,8 +136,8 @@ public class StarterBot2024Teleop extends OpMode
         //DRIVE
         double drive = -gamepad1.left_stick_y;
         double turn  =  gamepad1.right_stick_x;
-        leftPower    = Range.clip(0.8 * drive + 0.65 * turn, -1.0, 1.0) ;
-        rightPower   = Range.clip(0.8 * drive - 0.65 * turn, -1.0, 1.0) ;
+        leftPower    = Range.clip(0.7 * drive + 0.65 * turn, -1.0, 1.0) ;
+        rightPower   = Range.clip(0.7 * drive - 0.65 * turn, -1.0, 1.0) ;
 
         leftDrive.setPower(leftPower);
         rightDrive.setPower(rightPower);
@@ -243,6 +243,7 @@ public class StarterBot2024Teleop extends OpMode
                         ((Integer)armLeft.getTargetPosition()).toString() +
                         ", right = " +
                         ((Integer)armRight.getTargetPosition()).toString());
+        telemetry.addData("Wrist Pos:", wrist.getPosition());
 
         telemetry.addData("Status", "Run Time End: " + runtime.toString());
     }
