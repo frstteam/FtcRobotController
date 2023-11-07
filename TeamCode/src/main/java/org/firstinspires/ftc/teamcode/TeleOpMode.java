@@ -29,7 +29,6 @@
 
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -37,9 +36,9 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
-@TeleOp(name="Starter Bot 2024", group="Iterative Opmode")
+@TeleOp(name="Tele Op", group="Iterative Opmode")
 
-public class StarterBot2024Teleop extends OpMode
+public class TeleOpMode extends OpMode
 {
     // Declare OpMode members.
     private ElapsedTime runtime = new ElapsedTime();
@@ -62,15 +61,21 @@ public class StarterBot2024Teleop extends OpMode
 
     private final int armHomePosition = 0;
     private final int armIntakePosition = 10;
-    private final int armScorePosition = 550;
+    private final int armScorePosition = 520;
     private final int armShutdownThreshold = 5;
+
+    private final double SPEED_GAIN = 0.6;
+    private final double TURN_GAIN = 0.6;
+    private final double ARM_GAIN = 0.8;
+    private final double MAX_SPEED = 0.8;
+    private final double MAX_TURN = 0.8;
 
     /*
      * Code to run ONCE when the driver hits INIT
      */
     @Override
     public void init() {
-        telemetry.addData("Status", "Initialized");
+        telemetry.addData("Status", "Initializing");
 
         leftDrive  = hardwareMap.get(DcMotor.class, "leftDrive");
         rightDrive = hardwareMap.get(DcMotor.class, "rightDrive");
@@ -134,10 +139,10 @@ public class StarterBot2024Teleop extends OpMode
         double manualArmPower;
 
         //DRIVE
-        double drive = -gamepad1.left_stick_y;
-        double turn  =  gamepad1.right_stick_x;
-        leftPower    = Range.clip(0.7 * drive + 0.65 * turn, -1.0, 1.0) ;
-        rightPower   = Range.clip(0.7 * drive - 0.65 * turn, -1.0, 1.0) ;
+        double drive = SPEED_GAIN * -gamepad1.left_stick_y;
+        double turn  = TURN_GAIN * gamepad1.right_stick_x;
+        leftPower    = Range.clip(drive + turn, -MAX_SPEED, MAX_SPEED) ;
+        rightPower   = Range.clip(drive - turn, -MAX_TURN, MAX_TURN) ;
 
         leftDrive.setPower(leftPower);
         rightDrive.setPower(rightPower);
@@ -159,8 +164,8 @@ public class StarterBot2024Teleop extends OpMode
             if (manualMode) {
                 armLeft.setTargetPosition(armLeft.getCurrentPosition());
                 armRight.setTargetPosition(armRight.getCurrentPosition());
-                armLeft.setPower(1.0);
-                armRight.setPower(1.0);
+                armLeft.setPower(ARM_GAIN);
+                armRight.setPower(ARM_GAIN);
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 manualMode = false;
@@ -171,8 +176,8 @@ public class StarterBot2024Teleop extends OpMode
                 telemetry.addData("ControllerButton", "A / Cross");
                 armLeft.setTargetPosition(armHomePosition);
                 armRight.setTargetPosition(armHomePosition);
-                armLeft.setPower(0.5);
-                armRight.setPower(0.5);
+                armLeft.setPower(ARM_GAIN);
+                armRight.setPower(ARM_GAIN);
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristUpPosition);
@@ -181,8 +186,8 @@ public class StarterBot2024Teleop extends OpMode
                 telemetry.addData("ControllerButton", "B / Circle");
                 armLeft.setTargetPosition(armIntakePosition);
                 armRight.setTargetPosition(armIntakePosition);
-                armLeft.setPower(0.5);
-                armRight.setPower(0.5);
+                armLeft.setPower(ARM_GAIN);
+                armRight.setPower(ARM_GAIN);
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristDownPosition);
@@ -191,8 +196,8 @@ public class StarterBot2024Teleop extends OpMode
                 telemetry.addData("ControllerButton", "Y / Triangle");
                 armLeft.setTargetPosition(armScorePosition);
                 armRight.setTargetPosition(armScorePosition);
-                armLeft.setPower(0.5);
-                armRight.setPower(0.5);
+                armLeft.setPower(ARM_GAIN);
+                armRight.setPower(ARM_GAIN);
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristUpPosition);
