@@ -32,6 +32,9 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.BuiltinCameraDirection;
@@ -94,14 +97,34 @@ public class AutoOpMode extends LinearOpMode
     //  Set the GAIN constants to control the relationship between the measured position error, and how much power is
     //  applied to the drive motors to correct the error.
     //  Drive = Error * Gain    Make these values smaller for smoother control, or larger for a more aggressive response.
-    final double AUTO_SPEED_GAIN =   0.5;   //  Speed Control "Gain". eg: 0.04 = Ramp up to 50% power at a 12.5 inch error.   (0.50 / 25.0)
-    final double AUTO_TURN_GAIN  =   0.2;   //  Turn Control "Gain".  eg: 0.01 = Ramp up to 25% power at a 25 degree error. (0.25 / 25.0)
+    private static final double AUTO_SPEED_GAIN =   0.5;   //  Speed Control "Gain". eg: 0.04 = Ramp up to 50% power at a 12.5 inch error.   (0.50 / 25.0)
+    private static final double AUTO_TURN_GAIN  =   0.2;   //  Turn Control "Gain".  eg: 0.01 = Ramp up to 25% power at a 25 degree error. (0.25 / 25.0)
+    private static final double AUTO_ARM_GAIN = 0.8; // Arm movement "Gain"
 
     final double MAX_AUTO_SPEED = 0.5;   //  Clip the approach speed to this max value (adjust for your robot)
     final double MAX_AUTO_TURN  = 0.25;  //  Clip the turn speed to this max value (adjust for your robot)
 
-    private DcMotor leftDrive   = null;  //  Used to control the left drive wheel
-    private DcMotor rightDrive  = null;  //  Used to control the right drive wheel
+    private ElapsedTime runtime = new ElapsedTime();
+    private DcMotor leftDrive = null;
+    private DcMotor rightDrive = null;
+    private DcMotor armLeft = null;
+    private DcMotor armRight = null;
+    private Servo gripper = null;
+    private Servo wrist = null;
+
+    private double armSetpoint = 0.0;
+
+    private final double armManualDeadband = 0.03;
+
+    private final double gripperClosedPosition = 1.0;
+    private final double gripperOpenPosition = 0.5;
+    private final double wristUpPosition = 1.0;
+    private final double wristDownPosition = 0.0;
+
+    private final int armHomePosition = 0;
+    private final int armIntakePosition = 10;
+    private final int armScorePosition = 520;
+    private final int armShutdownThreshold = 5;
 
     private static final boolean USE_WEBCAM = true;  // Set true to use a webcam, or false for a phone camera
     private static final int DESIRED_TAG_ID = -1;    // Choose the tag you want to approach or set to -1 for ANY tag.
@@ -134,8 +157,7 @@ public class AutoOpMode extends LinearOpMode
     private static final int TAG_RED_RIGHT = 6;
     // Correct target location to compensate the difference between
     // the Camera location and robot center
-    private static final double X_CORRECTION = 6;
-//    private static final double STOP_DRIVE = 0.01; // drive value when the robot stops
+    private static final double X_CORRECTION = 0;
 
     private static final double COUNTS_PER_MOTOR_REV = 28.0;
     private static final double DRIVE_GEAR_REDUCTION = 30.21;
@@ -154,27 +176,7 @@ public class AutoOpMode extends LinearOpMode
         double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
         double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
 
-        // Initialize the Apriltag Detection process
-        initAprilTag();
-
-        // Initialize the hardware variables. Note that the strings used here as parameters
-        // to 'get' must match the names assigned during the robot configuration.
-        leftDrive  = hardwareMap.get(DcMotor.class, DEVICE_LEFT_DRIVE);
-        rightDrive = hardwareMap.get(DcMotor.class, DEVICE_RIGHT_DRIVE);
-        // Don't use encoders for both motors initially
-        leftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        rightDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-
-        // To drive forward, most robots need the motor on one side to be reversed because the axles point in opposite directions.
-        // When run, this OpMode should start both motors driving forward. So adjust these two lines based on your first test drive.
-        // Note: The settings here assume direct drive on left and right wheels.  Single Gear Reduction or 90 Deg drives may require direction flips
-        leftDrive.setDirection(DcMotor.Direction.FORWARD);
-        rightDrive.setDirection(DcMotor.Direction.REVERSE);
-        leftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-        rightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-
-        if (USE_WEBCAM)
-            setManualExposure(6, 250);  // Use low exposure time to reduce motion blur
+        initDevices();
 
         // Wait for the driver to press Start
         telemetry.addData("Camera preview on/off", "3 dots, Camera Stream");
@@ -257,7 +259,7 @@ public class AutoOpMode extends LinearOpMode
                 double  rangeError   = desiredTag.ftcPose.range - DESIRED_DISTANCE;
                 // Calculate bearing correction (as the camera is to the right of robot center)
                 // Do not re-calculate it in every iteration
-                if (!rangeWhenTagFound) {
+                if (!rangeWhenTagFound && X_CORRECTION != 0) {
                     telemetry.addData("Start Range", rangeError);
                     bearingCorrection = getBearingCorrection(X_CORRECTION, rangeError);
                     telemetry.addData("Bearing Correction", bearingCorrection);
@@ -272,34 +274,11 @@ public class AutoOpMode extends LinearOpMode
                 turn  = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
 
                 telemetry.addData("Auto","Drive %5.2f, Turn %5.2f", drive, turn);
-                // Turn 180 degrees to face the backstage after stopping
-                if (!leftDrive.isBusy() && !rightDrive.isBusy()) {
-                    // Use encoders with ticks set to 0 for both motors
-                    leftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-                    rightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-                    leftDrive.setTargetPosition(TURN_COUNTS);
-                    rightDrive.setTargetPosition(-TURN_COUNTS);
-                    leftDrive.setPower(MANUAL_TURN_SPEED);
-                    rightDrive.setPower(MANUAL_TURN_SPEED);
-                    while (leftDrive.isBusy() || rightDrive.isBusy()) {
-                        telemetry.addData("Current Position",
-                            "Left: %d, Right: %d",
-                            leftDrive.getCurrentPosition(), rightDrive.getCurrentPosition());
-                        telemetry.update();
-                        sleep(10);
-                    }
-                    // Reset mode
-                    leftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                    rightDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                }
-                else {
-                    telemetry.addData("Drive Status", "busy");
-                }
             } else {
                 // drive using manual POV Joystick mode.
                 // Flip left stick y and right stick x values to match Auto mode X and Yaw
-                drive = MANUAL_DRIVE_SPEED * -gamepad1.left_stick_y;  // Change drive rate by factor MANUAL_DRIVE_SPEED.
-                turn  = MANUAL_TURN_SPEED * -gamepad1.right_stick_x;  // Change turn rate by factor MANUAL_TURN_SPEED.
+                drive = MANUAL_DRIVE_SPEED * gamepad1.left_stick_y;  // Change drive rate by factor MANUAL_DRIVE_SPEED.
+                turn  = MANUAL_TURN_SPEED * gamepad1.right_stick_x;  // Change turn rate by factor MANUAL_TURN_SPEED.
                 telemetry.addData("Manual","Drive %5.2f, Turn %5.2f", drive, turn);
             }
             telemetry.update();
@@ -307,6 +286,15 @@ public class AutoOpMode extends LinearOpMode
             // Apply desired axes motions to the drivetrain.
             moveRobot(drive, turn);
             sleep(10);
+        }
+        if (!leftDrive.isBusy() && !rightDrive.isBusy()) {
+            telemetry.addData("Status", "Scoring started");
+            moveArmToScorePosition();
+            gripper.setPosition(gripperOpenPosition);
+            sleep(10);
+            gripper.setPosition(gripperClosedPosition);
+            moveArmToHomePosition();
+            telemetry.addData("Status", "Scoring completed");
         }
     }
 
@@ -330,8 +318,8 @@ public class AutoOpMode extends LinearOpMode
      */
     public void moveRobot(double x, double yaw) {
         // Calculate left and right wheel powers.
-        double leftPower    = x - yaw;
-        double rightPower   = x + yaw;
+        double leftPower    = x + yaw;
+        double rightPower   = x - yaw;
 
         // Normalize wheel powers to be less than 1.0
         double max = Math.max(Math.abs(leftPower), Math.abs(rightPower));
@@ -345,6 +333,83 @@ public class AutoOpMode extends LinearOpMode
         rightDrive.setPower(rightPower);
     }
 
+    private void moveArmToIntakePosition() {
+        telemetry.addData("Status", "Arm intake starting");
+        armLeft.setTargetPosition(armIntakePosition);
+        armRight.setTargetPosition(armIntakePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristDownPosition);
+        telemetry.addData("Status", "Arm intake done");
+    }
+
+    private void moveArmToScorePosition() {
+        telemetry.addData("Status", "Scoring");
+        armLeft.setTargetPosition(armScorePosition);
+        armRight.setTargetPosition(armScorePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristUpPosition);
+        telemetry.addData("Status", "Scored");
+    }
+
+    private void moveArmToHomePosition() {
+        telemetry.addData("Status", "Arm moving to home");
+        armLeft.setTargetPosition(armHomePosition);
+        armRight.setTargetPosition(armHomePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristUpPosition);
+        telemetry.addData("Status", "Arm at home");
+    }
+
+    private void initDevices() {
+        telemetry.addData("Status", "Initializing");
+
+        leftDrive  = hardwareMap.get(DcMotor.class, "leftDrive");
+        rightDrive = hardwareMap.get(DcMotor.class, "rightDrive");
+        armLeft  = hardwareMap.get(DcMotor.class, "armLeft");
+        armRight = hardwareMap.get(DcMotor.class, "armRight");
+        gripper = hardwareMap.get(Servo.class, "gripper");
+        wrist = hardwareMap.get(Servo.class, "wrist");
+
+        // To drive forward, most robots need the motor on one side to be reversed because the axles point in opposite directions.
+        // When run, this OpMode should start both motors driving forward. So adjust these two lines based on your first test drive.
+        // Note: The settings here assume direct drive on left and right wheels.  Single Gear Reduction or 90 Deg drives may require direction flips
+        leftDrive.setDirection(DcMotor.Direction.REVERSE);
+        rightDrive.setDirection(DcMotor.Direction.FORWARD);
+        leftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        rightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+
+        armLeft.setDirection(DcMotor.Direction.FORWARD);
+        armRight.setDirection(DcMotor.Direction.REVERSE);
+        armLeft.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        armRight.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        armLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        armRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        armLeft.setPower(0.0);
+        armRight.setPower(0.0);
+
+        // Initialize the Apriltag Detection process
+        initAprilTag();
+
+        // Don't use encoders for both motors initially
+        leftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        rightDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+
+        if (USE_WEBCAM)
+            setManualExposure(6, 250);  // Use low exposure time to reduce motion blur
+
+        telemetry.addData("Status", "Initialized");
+    }
     /**
      * Initialize the AprilTag processor.
      */
