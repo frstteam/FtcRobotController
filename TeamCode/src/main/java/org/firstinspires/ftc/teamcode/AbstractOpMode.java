@@ -91,8 +91,11 @@ import java.util.concurrent.TimeUnit;
 @Disabled
 public abstract class AbstractOpMode extends LinearOpMode
 {
+    protected int minTargetTagId;  // Min id of acceptable target tag
+    protected int maxTargetTagId;  // Max id of acceptable target tag
+
     // Adjust these numbers to suit your robot.
-    final double DESIRED_DISTANCE = 12.0; //  this is how close the camera should get to the target (inches)
+    final double DESIRED_DISTANCE = 3.0; //  this is how close the camera should get to the target (inches)
 
     //  Set the GAIN constants to control the relationship between the measured position error, and how much power is
     //  applied to the drive motors to correct the error.

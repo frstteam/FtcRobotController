@@ -32,10 +32,12 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -86,8 +88,17 @@ public class PracticeAutoOpMode extends AbstractOpMode
         boolean targetFound     = false;    // Set to true when an AprilTag target is detected
         double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
         double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
-        boolean movingToTarget  = false;
-        boolean movedToTarget   = false;
+
+        final String ALLIANCE = "BLUE";
+
+        if (ALLIANCE.equals("BLUE")) {
+            minTargetTagId = TAG_BLUE_LEFT;
+            maxTargetTagId = TAG_BLUE_RIGHT;
+        }
+        else {
+            minTargetTagId = TAG_RED_LEFT;
+            maxTargetTagId = TAG_RED_RIGHT;
+        }
 
         initDevices();
 
@@ -97,21 +108,22 @@ public class PracticeAutoOpMode extends AbstractOpMode
         telemetry.update();
         waitForStart();
 
-        while (opModeIsActive())
-        {
+        int iteration = 0;
+        runtime.reset();
+        ArrayList<Double> rangeErrors = new ArrayList<Double>(); // Used to find if rangeError is constant across iterations, i.e. if robot has stopped.
+
+        while (opModeIsActive()) {
             targetFound = false;
-            desiredTag  = null;
+            desiredTag = null;
             // Initialize targetTag to unknown
-            int targetTag = -1;
+            // int targetTag = -1;
             // Step through the list of detected tags and look for a matching tag
             List<AprilTagDetection> currentDetections = aprilTag.getDetections();
             for (AprilTagDetection detection : currentDetections) {
                 // Look to see if we have size info on this tag.
                 if (detection.metadata != null) {
                     //  Check to see if we want to track towards this tag.
-                    //  Change from default DESIRED_TAG_ID tracking to targetTag tracking
-                    //  if ((DESIRED_TAG_ID < 0) || (detection.id == DESIRED_TAG_ID)) {
-                    if (targetTag < 0) {
+                    if (detection.id >= minTargetTagId && detection.id <= maxTargetTagId) {
                         // Yes, we want to use this tag.
                         targetFound = true;
                         desiredTag = detection;
@@ -128,47 +140,51 @@ public class PracticeAutoOpMode extends AbstractOpMode
             }
 
             // Tell the driver what we see, and what to do.
+            telemetry.addData("Iteration:Time", "%d:%.2f", ++iteration, runtime.time());
+
             if (targetFound) {
-                telemetry.addData("\n>","HOLD Left-Bumper to Drive to Target\n");
                 telemetry.addData("Found", "ID %d (%s)", desiredTag.id, desiredTag.metadata.name);
-                telemetry.addData("Range",  "%5.1f inches", desiredTag.ftcPose.range);
-                telemetry.addData("Bearing","%3.0f degrees", desiredTag.ftcPose.bearing);
+                telemetry.addData("Range", "%5.1f inches", desiredTag.ftcPose.range);
+                telemetry.addData("Bearing", "%3.0f degrees", desiredTag.ftcPose.bearing);
                 // Determine heading and range error so we can use them to control the robot automatically.
-                double  rangeError   = desiredTag.ftcPose.range;
+                double rangeError = desiredTag.ftcPose.range - DESIRED_DISTANCE;
+                // Remember current range error for every 10 iterations
+                if (iteration % 10 == 0) {
+                    rangeErrors.add(rangeError);
+                }
                 telemetry.addData("Range Error", rangeError);
-                double  headingError = desiredTag.ftcPose.bearing - bearingCorrection;
+                double headingError = desiredTag.ftcPose.bearing - bearingCorrection;
                 telemetry.addData("Bearing Error", headingError);
 
                 // Use the speed and turn "gains" to calculate how we want the robot to move.  Clip it to the maximum
                 drive = Range.clip(rangeError * AUTO_SPEED_GAIN, -MAX_AUTO_SPEED, MAX_AUTO_SPEED);
-                turn  = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
-
-                telemetry.addData("Auto","Drive %5.2f, Turn %5.2f", drive, turn);
-            } else {
-                telemetry.addData("\n>","Drive using joysticks to find valid target\n");
-                // drive using manual POV Joystick mode.
-                // Flip left stick y and right stick x values to match Auto mode X and Yaw
-                drive = MANUAL_DRIVE_SPEED * gamepad1.left_stick_y;  // Change drive rate by factor MANUAL_DRIVE_SPEED.
-                turn  = MANUAL_TURN_SPEED * gamepad1.right_stick_x;  // Change turn rate by factor MANUAL_TURN_SPEED.
-                telemetry.addData("Manual","Drive %5.2f, Turn %5.2f", drive, turn);
+                turn = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
+            }
+            else {
+                // Turn to try to find a acceptable target tag
+                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
             }
 
+            telemetry.addData("Auto", "Drive %5.2f, Turn %5.2f", drive, turn);
             telemetry.update();
 
             // Apply desired axes motions to the drivetrain.
-            movingToTarget = true;
             moveRobot(drive, turn);
             sleep(10);
 
-            if (gamepad2.a) {
-                moveArmToHomePosition();
+            // Check if the range error is constant for a few iterations, before trying to score
+            int numRangeErrors = rangeErrors.size();
+            if (numRangeErrors > 50
+                    && rangeErrors.get(numRangeErrors - 1) - rangeErrors.get(numRangeErrors - 51) <= 0.001) {
+                updateStatus("Constant range error");
+                leftDrive.setPower(0.0);
+                rightDrive.setPower(0.0);
+                break;
             }
-            else if (gamepad2.b) {
-                moveArmToIntakePosition();
-            }
-            else if (gamepad2.y) {
-                moveArmToScoringPosition();
-            }
+        }
+        // Scoring
+        if (opModeIsActive()) {
+            //Watchdog to shut down motor once the arm reaches the home position
             if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
                     armLeft.getTargetPosition() <= armShutdownThreshold &&
                     armLeft.getCurrentPosition() <= armShutdownThreshold
@@ -179,36 +195,17 @@ public class PracticeAutoOpMode extends AbstractOpMode
                 armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
 
-//            if (!leftDrive.isBusy() && !rightDrive.isBusy() && movingToTarget)
-//                movingToTarget = false;
-//
-//            if (!leftDrive.isBusy() && !rightDrive.isBusy()
-//                && targetFound && !movingToTarget  && !movedToTarget && !isStopRequested()) {
-//                movedToTarget = true;
-//                telemetry.addData("Status", "Scoring started");
-//                moveArmToScoringPosition();
-//                updateStatus("Moved arm. Sleeping 2 s");
-//                sleep(2000);
-//                gripper.setPosition(gripperOpenPosition);
-//                updateStatus("Dropped pixel. Sleeping 2 s");
-//                sleep(2000);
-//                gripper.setPosition(gripperClosedPosition);
-//                moveArmToHomePosition();
-//                updateStatus("Scored. Sleeping 2 s");
-//                sleep(2000);
-//                //Watchdog to shut down motor once the arm reaches the home position
-//                if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
-//                        armLeft.getTargetPosition() <= armShutdownThreshold &&
-//                        armLeft.getCurrentPosition() <= armShutdownThreshold
-//                ) {
-//                    armLeft.setPower(0.0);
-//                    armRight.setPower(0.0);
-//                    armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-//                    armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-//                }
-//                stop();
-//                // TODO: Move robot to wing
-//            }
+            telemetry.addData("Status", "Scoring started");
+            moveArmToScoringPosition();
+            updateStatus("Moved arm. Sleeping 2 s");
+            sleep(2000);
+            gripper.setPosition(gripperOpenPosition);
+            updateStatus("Dropped pixel. Sleeping 3 s");
+            sleep(3000);
+            gripper.setPosition(gripperClosedPosition);
+            moveArmToHomePosition();
+            updateStatus("Scored. Stopping");
+            stop();
         }
     }
 }

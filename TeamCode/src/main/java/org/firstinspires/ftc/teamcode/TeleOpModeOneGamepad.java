@@ -60,7 +60,7 @@ public class TeleOpModeOneGamepad extends OpMode
     private final double wristDownPosition = 0.0;
 
     private final int armHomePosition = 0;
-    private final int armIntakePosition = 5;
+    private final int armIntakePosition = 3;
     private final int armScorePosition = 520;
     private final int armShutdownThreshold = 5;
 
