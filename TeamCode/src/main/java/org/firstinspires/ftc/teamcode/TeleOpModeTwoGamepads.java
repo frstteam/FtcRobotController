@@ -29,16 +29,16 @@
 
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
-@TeleOp(name="Tele Op", group="Iterative Opmode")
+@TeleOp(name="Tele Op - 2 Gamepads", group="Iterative Opmode")
 
-public class TeleOpMode extends OpMode
+public class TeleOpModeTwoGamepads extends OpMode
 {
     // Declare OpMode members.
     private ElapsedTime runtime = new ElapsedTime();
@@ -60,12 +60,12 @@ public class TeleOpMode extends OpMode
     private final double wristDownPosition = 0.0;
 
     private final int armHomePosition = 0;
-    private final int armIntakePosition = 10;
+    private final int armIntakePosition = 5;
     private final int armScorePosition = 520;
     private final int armShutdownThreshold = 5;
 
-    private final double SPEED_GAIN = 0.6;
-    private final double TURN_GAIN = 0.6;
+    private final double SPEED_GAIN = 0.7;
+    private final double TURN_GAIN = 0.7;
     private final double ARM_GAIN = 0.8;
     private final double MAX_SPEED = 0.8;
     private final double MAX_TURN = 0.8;
@@ -148,7 +148,7 @@ public class TeleOpMode extends OpMode
         rightDrive.setPower(rightPower);
 
         //ARM & WRIST
-        manualArmPower = gamepad1.right_trigger - gamepad1.left_trigger;
+        manualArmPower = gamepad2.right_trigger - gamepad2.left_trigger;
         if (Math.abs(manualArmPower) > armManualDeadband) {
             if (!manualMode) {
                 armLeft.setPower(0.0);
@@ -172,8 +172,8 @@ public class TeleOpMode extends OpMode
             }
 
             //preset buttons
-            if (gamepad1.a) {
-                telemetry.addData("ControllerButton", "A / Cross");
+            if (gamepad2.a) {
+                telemetry.addData("Arm Position", "Home");
                 armLeft.setTargetPosition(armHomePosition);
                 armRight.setTargetPosition(armHomePosition);
                 armLeft.setPower(ARM_GAIN);
@@ -182,8 +182,8 @@ public class TeleOpMode extends OpMode
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristUpPosition);
             }
-            else if (gamepad1.b) {
-                telemetry.addData("ControllerButton", "B / Circle");
+            else if (gamepad2.b) {
+                telemetry.addData("Arm Position", "Intake");
                 armLeft.setTargetPosition(armIntakePosition);
                 armRight.setTargetPosition(armIntakePosition);
                 armLeft.setPower(ARM_GAIN);
@@ -192,8 +192,8 @@ public class TeleOpMode extends OpMode
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristDownPosition);
             }
-            else if (gamepad1.y) {
-                telemetry.addData("ControllerButton", "Y / Triangle");
+            else if (gamepad2.y) {
+                telemetry.addData("Arm Position", "Scoring");
                 armLeft.setTargetPosition(armScorePosition);
                 armRight.setTargetPosition(armScorePosition);
                 armLeft.setPower(ARM_GAIN);
@@ -205,7 +205,7 @@ public class TeleOpMode extends OpMode
         }
 
         //Re-zero encoder button
-        if (gamepad1.start) {
+        if (gamepad2.start) {
             armLeft.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             armRight.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             armLeft.setPower(0.0);
@@ -226,14 +226,14 @@ public class TeleOpMode extends OpMode
         }
 
         //GRIPPER
-        if (gamepad1.left_bumper || gamepad1.right_bumper) {
+        if (gamepad2.left_bumper || gamepad2.right_bumper) {
             gripper.setPosition(gripperOpenPosition);
         }
         else {
             gripper.setPosition(gripperClosedPosition);
         }
-        telemetry.addData("Left Bumper", gamepad1.left_bumper);
-        telemetry.addData("Right Bumper", gamepad1.right_bumper);
+        telemetry.addData("Left Bumper", gamepad2.left_bumper);
+        telemetry.addData("Right Bumper", gamepad2.right_bumper);
 
         telemetry.addData("Gamepad", "drive (%.2f), turn (%.2f)", drive, turn);
         telemetry.addData("Motors", "left (%.2f), right (%.2f)", leftPower, rightPower);

@@ -30,24 +30,13 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
-import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
-import org.firstinspires.ftc.robotcore.external.hardware.camera.BuiltinCameraDirection;
-import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
-import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
-import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainControl;
-import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /*
  * This OpMode illustrates using a camera to locate and drive towards a specific AprilTag.
@@ -88,16 +77,17 @@ import java.util.concurrent.TimeUnit;
  *
  */
 
-@TeleOp(name="Auto Op", group = "Iterative Opmode")
-@Disabled
+@TeleOp(name="Practice - Auto Op", group = "Iterative Opmode")
 
-public class AutoOpMode extends AbstractOpMode
+public class PracticeAutoOpMode extends AbstractOpMode
 {
     @Override public void runOpMode()
     {
         boolean targetFound     = false;    // Set to true when an AprilTag target is detected
         double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
         double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
+        boolean movingToTarget  = false;
+        boolean movedToTarget   = false;
 
         initDevices();
 
@@ -112,35 +102,7 @@ public class AutoOpMode extends AbstractOpMode
             targetFound = false;
             desiredTag  = null;
             // Initialize targetTag to unknown
-            // int targetTag = -1;
-            // TODO: Reset targetTag to -1 after testing
-            int targetTag = TAG_RED_LEFT;
-
-            if (gamepad2.x) {
-                // Go to Tag #4 - Red Left
-                targetTag = TAG_RED_LEFT;
-                telemetry.addData("Target Tag", TAG_RED_LEFT+ "(Red Left)");
-                telemetry.update();
-            }
-            else if (gamepad2.y) {
-                // Go to Tag #4 - Red Center
-                targetTag = TAG_RED_CENTER;
-                telemetry.addData("Target Tag", TAG_RED_CENTER + " (Red Center)");
-                telemetry.update();
-            }
-            else if (gamepad2.b) {
-                // Go to Tag #4 - Red Right
-                targetTag = TAG_RED_RIGHT;
-                telemetry.addData("Target Tag", TAG_RED_RIGHT + " (Red Right)");
-                telemetry.update();
-            }
-            // Remove after testing
-            else if (gamepad2.a) {
-                // Go to Tag #2 - Blue Center
-                targetTag = TAG_BLUE_CENTER;
-                telemetry.addData("Target Tag", TAG_BLUE_CENTER + " (Blue Center)");
-                telemetry.update();
-            }
+            int targetTag = -1;
             // Step through the list of detected tags and look for a matching tag
             List<AprilTagDetection> currentDetections = aprilTag.getDetections();
             for (AprilTagDetection detection : currentDetections) {
@@ -149,7 +111,7 @@ public class AutoOpMode extends AbstractOpMode
                     //  Check to see if we want to track towards this tag.
                     //  Change from default DESIRED_TAG_ID tracking to targetTag tracking
                     //  if ((DESIRED_TAG_ID < 0) || (detection.id == DESIRED_TAG_ID)) {
-                    if (detection.id == targetTag) {
+                    if (targetTag < 0) {
                         // Yes, we want to use this tag.
                         targetFound = true;
                         desiredTag = detection;
@@ -177,17 +139,8 @@ public class AutoOpMode extends AbstractOpMode
 
             // If Left Bumper is being pressed, AND we have found the desired target, Drive to target Automatically .
             if (gamepad1.left_bumper && targetFound) {
-
                 // Determine heading and range error so we can use them to control the robot automatically.
-                double  rangeError   = desiredTag.ftcPose.range - DESIRED_DISTANCE;
-                // Calculate bearing correction (as the camera is to the right of robot center)
-                // Do not re-calculate it in every iteration
-                if (!rangeWhenTagFound && X_CORRECTION != 0) {
-                    telemetry.addData("Start Range", rangeError);
-                    bearingCorrection = getBearingCorrection(X_CORRECTION, rangeError);
-                    telemetry.addData("Bearing Correction", bearingCorrection);
-                    rangeWhenTagFound = true;
-                }
+                double  rangeError   = desiredTag.ftcPose.range;
                 telemetry.addData("Range Error", rangeError);
                 double  headingError = desiredTag.ftcPose.bearing - bearingCorrection;
                 telemetry.addData("Bearing Error", headingError);
@@ -207,18 +160,59 @@ public class AutoOpMode extends AbstractOpMode
             telemetry.update();
 
             // Apply desired axes motions to the drivetrain.
+            movingToTarget = true;
             moveRobot(drive, turn);
             sleep(10);
-        }
-        if (!leftDrive.isBusy() && !rightDrive.isBusy()) {
-            telemetry.addData("Status", "Scoring started");
-            moveArmToScoringPosition();
-            gripper.setPosition(gripperOpenPosition);
-            sleep(1000);
-            gripper.setPosition(gripperClosedPosition);
-            moveArmToHomePosition();
-            telemetry.addData("Status", "Scoring completed");
-            stop();
+
+            if (gamepad2.a) {
+                moveArmToHomePosition();
+            }
+            else if (gamepad2.b) {
+                moveArmToIntakePosition();
+            }
+            else if (gamepad2.y) {
+                moveArmToScoringPosition();
+            }
+            if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
+                    armLeft.getTargetPosition() <= armShutdownThreshold &&
+                    armLeft.getCurrentPosition() <= armShutdownThreshold
+            ) {
+                armLeft.setPower(0.0);
+                armRight.setPower(0.0);
+                armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+
+//            if (!leftDrive.isBusy() && !rightDrive.isBusy() && movingToTarget)
+//                movingToTarget = false;
+//
+//            if (!leftDrive.isBusy() && !rightDrive.isBusy()
+//                && targetFound && !movingToTarget  && !movedToTarget && !isStopRequested()) {
+//                movedToTarget = true;
+//                telemetry.addData("Status", "Scoring started");
+//                moveArmToScoringPosition();
+//                updateStatus("Moved arm. Sleeping 2 s");
+//                sleep(2000);
+//                gripper.setPosition(gripperOpenPosition);
+//                updateStatus("Dropped pixel. Sleeping 2 s");
+//                sleep(2000);
+//                gripper.setPosition(gripperClosedPosition);
+//                moveArmToHomePosition();
+//                updateStatus("Scored. Sleeping 2 s");
+//                sleep(2000);
+//                //Watchdog to shut down motor once the arm reaches the home position
+//                if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
+//                        armLeft.getTargetPosition() <= armShutdownThreshold &&
+//                        armLeft.getCurrentPosition() <= armShutdownThreshold
+//                ) {
+//                    armLeft.setPower(0.0);
+//                    armRight.setPower(0.0);
+//                    armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+//                    armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+//                }
+//                stop();
+//                // TODO: Move robot to wing
+//            }
         }
     }
 }
