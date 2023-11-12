@@ -133,12 +133,6 @@ public class PracticeAutoOpMode extends AbstractOpMode
                 telemetry.addData("Found", "ID %d (%s)", desiredTag.id, desiredTag.metadata.name);
                 telemetry.addData("Range",  "%5.1f inches", desiredTag.ftcPose.range);
                 telemetry.addData("Bearing","%3.0f degrees", desiredTag.ftcPose.bearing);
-            } else {
-                telemetry.addData("\n>","Drive using joysticks to find valid target\n");
-            }
-
-            // If Left Bumper is being pressed, AND we have found the desired target, Drive to target Automatically .
-            if (gamepad1.left_bumper && targetFound) {
                 // Determine heading and range error so we can use them to control the robot automatically.
                 double  rangeError   = desiredTag.ftcPose.range;
                 telemetry.addData("Range Error", rangeError);
@@ -151,12 +145,14 @@ public class PracticeAutoOpMode extends AbstractOpMode
 
                 telemetry.addData("Auto","Drive %5.2f, Turn %5.2f", drive, turn);
             } else {
+                telemetry.addData("\n>","Drive using joysticks to find valid target\n");
                 // drive using manual POV Joystick mode.
                 // Flip left stick y and right stick x values to match Auto mode X and Yaw
                 drive = MANUAL_DRIVE_SPEED * gamepad1.left_stick_y;  // Change drive rate by factor MANUAL_DRIVE_SPEED.
                 turn  = MANUAL_TURN_SPEED * gamepad1.right_stick_x;  // Change turn rate by factor MANUAL_TURN_SPEED.
                 telemetry.addData("Manual","Drive %5.2f, Turn %5.2f", drive, turn);
             }
+
             telemetry.update();
 
             // Apply desired axes motions to the drivetrain.
