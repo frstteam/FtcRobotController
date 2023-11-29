@@ -45,6 +45,7 @@ import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -91,6 +92,11 @@ import java.util.concurrent.TimeUnit;
 @Disabled
 public abstract class AbstractOpMode extends LinearOpMode
 {
+    public enum Alliance {
+        RED,
+        BLUE
+    }
+    protected Alliance alliance;
     protected int minTargetTagId;  // Min id of acceptable target tag
     protected int maxTargetTagId;  // Max id of acceptable target tag
 
@@ -100,9 +106,9 @@ public abstract class AbstractOpMode extends LinearOpMode
     //  Set the GAIN constants to control the relationship between the measured position error, and how much power is
     //  applied to the drive motors to correct the error.
     //  Drive = Error * Gain    Make these values smaller for smoother control, or larger for a more aggressive response.
-    protected static final double AUTO_SPEED_GAIN =   0.02;   //  Speed Control "Gain". eg: 0.04 = Ramp up to 50% power at a 12.5 inch error.   (0.50 / 25.0)
-    protected static final double AUTO_TURN_GAIN  =   0.01;   //  Turn Control "Gain".  eg: 0.01 = Ramp up to 25% power at a 25 degree error. (0.25 / 25.0)
-    protected static final double AUTO_ARM_GAIN = 0.7; // Arm movement "Gain"
+    static final double AUTO_SPEED_GAIN =   0.02;   //  Speed Control "Gain". eg: 0.04 = Ramp up to 50% power at a 12.5 inch error.   (0.50 / 25.0)
+    static final double AUTO_TURN_GAIN  =   0.01;   //  Turn Control "Gain".  eg: 0.01 = Ramp up to 25% power at a 25 degree error. (0.25 / 25.0)
+    static final double AUTO_ARM_GAIN = 0.7; // Arm movement "Gain"
 
     final double MAX_AUTO_SPEED = 0.5;   //  Clip the approach speed to this max value (adjust for your robot)
     final double MAX_AUTO_TURN  = 0.25;  //  Clip the turn speed to this max value (adjust for your robot)
@@ -129,15 +135,15 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected final int armScorePosition = 520;
     protected final int armShutdownThreshold = 5;
 
-    protected static final boolean USE_WEBCAM = true;  // Set true to use a webcam, or false for a phone camera
-    protected static final int DESIRED_TAG_ID = -1;    // Choose the tag you want to approach or set to -1 for ANY tag.
+    static final boolean USE_WEBCAM = true;  // Set true to use a webcam, or false for a phone camera
+    static final int DESIRED_TAG_ID = -1;    // Choose the tag you want to approach or set to -1 for ANY tag.
     protected VisionPortal visionPortal;               // Used to manage the video source.
     protected AprilTagProcessor aprilTag;              // Used for managing the AprilTag detection process.
     protected AprilTagDetection desiredTag = null;     // Used to hold the data for a detected AprilTag
     boolean rangeWhenTagFound = false;               // Used to determine range from the starting point, when the desired tag is found
     double bearingCorrection = 0;                    // Used to determine additional turn angle to center the robot in front of the tag
-    protected static final double MANUAL_DRIVE_SPEED = 0.5;
-    protected static final double MANUAL_TURN_SPEED = 0.5;
+    static final double MANUAL_DRIVE_SPEED = 0.5;
+    static final double MANUAL_TURN_SPEED = 0.5;
 
     // Adjust Image Decimation to trade-off detection-range for detection-rate.
     // eg: Some typical detection data using a Logitech C920 WebCam
@@ -146,108 +152,40 @@ public abstract class AbstractOpMode extends LinearOpMode
     // Decimation = 3 ..  Detect 2" Tag from 4  feet away at 30 Frames Per Second
     // Decimation = 3 ..  Detect 5" Tag from 10 feet away at 30 Frames Per Second
     // Note: Decimation can be changed on-the-fly to adapt during a match.
-    protected static final int TAG_IMAGE_DECIMATION_10_FT = 1;
-    protected static final int TAG_IMAGE_DECIMATION_6_FT = 2;
-    protected static final int TAG_IMAGE_DECIMATION_4_FT = 3;
-    protected static final String DEVICE_LEFT_DRIVE = "leftDrive";
-    protected static final String DEVICE_RIGHT_DRIVE = "rightDrive";
-    protected static final String DEVICE_CAMERA_1 = "Webcam 1";
-    protected static final int TAG_BLUE_LEFT = 1;
-    protected static final int TAG_BLUE_CENTER = 2;
-    protected static final int TAG_BLUE_RIGHT = 3;
-    protected static final int TAG_RED_LEFT = 4;
-    protected static final int TAG_RED_CENTER = 5;
-    protected static final int TAG_RED_RIGHT = 6;
+    static final int TAG_IMAGE_DECIMATION_10_FT = 1;
+    static final int TAG_IMAGE_DECIMATION_6_FT = 2;
+    static final int TAG_IMAGE_DECIMATION_4_FT = 3;
+    static final String DEVICE_LEFT_DRIVE = "leftDrive";
+    static final String DEVICE_RIGHT_DRIVE = "rightDrive";
+    static final String DEVICE_CAMERA_1 = "Webcam 1";
+    static final int TAG_BLUE_LEFT = 1;
+    static final int TAG_BLUE_CENTER = 2;
+    static final int TAG_BLUE_RIGHT = 3;
+    static final int TAG_RED_LEFT = 4;
+    static final int TAG_RED_CENTER = 5;
+    static final int TAG_RED_RIGHT = 6;
     // Correct target location to compensate the difference between
     // the Camera location and robot center
-    protected static final double X_CORRECTION = 0;
+    static final double X_CORRECTION = 0;
 
-    protected static final double COUNTS_PER_MOTOR_REV = 28.0;
-    protected static final double DRIVE_GEAR_REDUCTION = 30.21;
-    protected static final double WHEEL_CIRCUMFERENCE_MM = 90.0 * Math.PI;
-    protected static final double ROBOT_TRACK_WIDTH_MM = 300.0; // distance between the wheels
-    protected static final double DEGREES_TO_TURN = 180;
+    static final double COUNTS_PER_MOTOR_REV = 28.0;
+    static final double DRIVE_GEAR_REDUCTION = 30.21;
+    static final double WHEEL_CIRCUMFERENCE_MM = 90.0 * Math.PI;
+    static final double ROBOT_TRACK_WIDTH_MM = 300.0; // distance between the wheels
+    static final double COUNTS_PER_WHEEL_REV = COUNTS_PER_MOTOR_REV * DRIVE_GEAR_REDUCTION;
+    static final double COUNTS_PER_MM = COUNTS_PER_WHEEL_REV / WHEEL_CIRCUMFERENCE_MM;
 
-    protected static final double COUNTS_PER_WHEEL_REV = COUNTS_PER_MOTOR_REV * DRIVE_GEAR_REDUCTION;
-    protected static final double COUNTS_PER_MM = COUNTS_PER_WHEEL_REV / WHEEL_CIRCUMFERENCE_MM;
-    protected static final double TURN_DISTANCE = ROBOT_TRACK_WIDTH_MM * Math.PI * (DEGREES_TO_TURN / 360.0);
-    protected static final int TURN_COUNTS = (int)(TURN_DISTANCE * COUNTS_PER_MM / 2); // Number of counts to turn DEGREES_TO_TURN degrees
+    static final int STOP_INTERVAL = 50; // Number of iterations for which range error should be constant, to determine that the robot has stopped.
+    static final double RANGE_ERROR_TOLERANCE = 0.001; // Range error will be considered constant if it's within this tolerance
 
-    protected static final int STOP_INTERVAL = 50; // Number of iterations for which range error should be constant, to determine that the robot has stopped.
-    protected static final double RANGE_ERROR_TOLERANCE = 0.001; // Range error will be considered constant if it's within this tolerance
+    protected double parkTurnDegrees; // Turn this much to park after scoring
+    protected double parkDriveMm; // Drive this much to park after scoring
+
     /**
-     * Find bearing angle correction given X correction and range
+     * Initialize devices
      */
-    protected double getBearingCorrection(double xCorrection, double range) {
-        double angleRadians = Math.asin(xCorrection / range);
-        // Turn 180 degrees as the camera is on the front, but
-        // the scoring position needs the back facing the board
-        double angleDegrees = Math.toDegrees(angleRadians);
-
-        return angleDegrees;
-    }
-    /**
-     * Move robot according to desired axes motions
-     * <p>
-     * Positive X is forward
-     * <p>
-     * Positive Yaw is counter-clockwise
-     */
-    public void moveRobot(double x, double yaw) {
-        // Calculate left and right wheel powers.
-        double leftPower    = x + yaw;
-        double rightPower   = x - yaw;
-
-        // Normalize wheel powers to be less than 1.0
-        double max = Math.max(Math.abs(leftPower), Math.abs(rightPower));
-        if (max > 1.0) {
-            leftPower /= max;
-            rightPower /= max;
-        }
-
-        // Send powers to the wheels.
-        leftDrive.setPower(leftPower);
-        rightDrive.setPower(rightPower);
-    }
-
-    protected void moveArmToIntakePosition() {
-        telemetry.addData("Status", "Arm intake starting");
-        armLeft.setTargetPosition(armIntakePosition);
-        armRight.setTargetPosition(armIntakePosition);
-        armLeft.setPower(AUTO_ARM_GAIN);
-        armRight.setPower(AUTO_ARM_GAIN);
-        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        wrist.setPosition(wristDownPosition);
-        telemetry.addData("Status", "Arm intake done");
-    }
-
-    protected void moveArmToScoringPosition() {
-        telemetry.addData("Status", "Scoring");
-        armLeft.setTargetPosition(armScorePosition);
-        armRight.setTargetPosition(armScorePosition);
-        armLeft.setPower(AUTO_ARM_GAIN);
-        armRight.setPower(AUTO_ARM_GAIN);
-        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        wrist.setPosition(wristUpPosition);
-        telemetry.addData("Status", "Scored");
-    }
-
-    protected void moveArmToHomePosition() {
-        telemetry.addData("Status", "Arm moving to home");
-        armLeft.setTargetPosition(armHomePosition);
-        armRight.setTargetPosition(armHomePosition);
-        armLeft.setPower(AUTO_ARM_GAIN);
-        armRight.setPower(AUTO_ARM_GAIN);
-        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        wrist.setPosition(wristUpPosition);
-        telemetry.addData("Status", "Arm at home");
-    }
-
     protected void initDevices() {
-        telemetry.addData("Status", "Initializing");
+        updateStatus("Initializing");
 
         leftDrive  = hardwareMap.get(DcMotor.class, "leftDrive");
         rightDrive = hardwareMap.get(DcMotor.class, "rightDrive");
@@ -285,8 +223,176 @@ public abstract class AbstractOpMode extends LinearOpMode
         if (USE_WEBCAM)
             setManualExposure(6, 250);  // Use low exposure time to reduce motion blur
 
-        telemetry.addData("Status", "Initialized");
+        updateStatus("Initialized");
+    }   /**
+     * Do this after initializing devices, before start button is tapped
+     */
+
+    protected void waitBeforeStart() {
+        // Wait for the driver to press Start
+        telemetry.addData("Camera preview on/off", "3 dots, Camera Stream");
+        telemetry.addData(">", "Touch Play to start OpMode");
+        telemetry.update();
+        waitForStart();
     }
+
+    /**
+     * Detect target tag and move toward it
+     */
+    protected void moveToTargetTag() {
+        boolean targetFound     = false;    // Set to true when an AprilTag target is detected
+        double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
+        double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
+        boolean movedToTarget   = false;
+
+        int iteration = 0;
+        runtime.reset();
+        ArrayList<Double> rangeErrors = new ArrayList<Double>(); // Used to find if rangeError is constant across iterations, i.e. if robot has stopped.
+
+        while (opModeIsActive()) {
+            targetFound = false;
+            desiredTag = null;
+            // Initialize targetTag to unknown
+            // int targetTag = -1;
+            // Step through the list of detected tags and look for a matching tag
+            List<AprilTagDetection> currentDetections = aprilTag.getDetections();
+            for (AprilTagDetection detection : currentDetections) {
+                // Look to see if we have size info on this tag.
+                if (detection.metadata != null) {
+                    //  Check to see if we want to track towards this tag.
+                    if (detection.id >= minTargetTagId && detection.id <= maxTargetTagId) {
+                        // Yes, we want to use this tag.
+                        targetFound = true;
+                        desiredTag = detection;
+
+                        break;  // don't look any further.
+                    } else {
+                        // This tag is in the library, but we do not want to track it right now.
+                        telemetry.addData("Skipping", "Tag ID %d is not desired", detection.id);
+                    }
+                } else {
+                    // This tag is NOT in the library, so we don't have enough information to track to it.
+                    telemetry.addData("Unknown", "Tag ID %d is not in TagLibrary", detection.id);
+                }
+            }
+
+            // Tell the driver what we see, and what to do.
+            telemetry.addData("Iteration:Time", "%d:%.2f", ++iteration, runtime.time());
+
+            if (targetFound) {
+                telemetry.addData("Found", "ID %d (%s)", desiredTag.id, desiredTag.metadata.name);
+                telemetry.addData("Range", "%5.1f inches", desiredTag.ftcPose.range);
+                telemetry.addData("Bearing", "%3.0f degrees", desiredTag.ftcPose.bearing);
+                // Determine heading and range error so we can use them to control the robot automatically.
+                double rangeError = desiredTag.ftcPose.range - DESIRED_DISTANCE;
+                // Remember current range error for every 10 iterations
+                if (iteration % 10 == 0) {
+                    rangeErrors.add(rangeError);
+                }
+                telemetry.addData("Range Error", rangeError);
+                double headingError = desiredTag.ftcPose.bearing - bearingCorrection;
+                telemetry.addData("Bearing Error", headingError);
+
+                // Use the speed and turn "gains" to calculate how we want the robot to move.  Clip it to the maximum
+                drive = Range.clip(rangeError * AUTO_SPEED_GAIN, -MAX_AUTO_SPEED, MAX_AUTO_SPEED);
+                turn = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
+            }
+//            else if (!movedToTarget) {
+//                // Turn to try to find a acceptable target tag
+//                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
+//                sleep(20);
+//            }
+
+            telemetry.addData("Auto", "Drive %5.2f, Turn %5.2f", drive, turn);
+            telemetry.update();
+
+            // Apply desired axes motions to the drivetrain.
+            moveRobot(drive, turn);
+            sleep(10);
+
+            // Check if the range error is constant for a few iterations, before trying to score
+            int numRangeErrors = rangeErrors.size();
+            if (numRangeErrors > STOP_INTERVAL
+                    && rangeErrors.get(numRangeErrors - 1)
+                    - rangeErrors.get(numRangeErrors - (STOP_INTERVAL + 1)) <= RANGE_ERROR_TOLERANCE) {
+                updateStatus("Constant range error");
+                stopRobot();
+                movedToTarget = true;
+                break;
+            }
+        }
+    }
+    /**
+     * Find bearing angle correction given X correction and range
+     */
+    protected double getBearingCorrection(double xCorrection, double range) {
+        double angleRadians = Math.asin(xCorrection / range);
+        // Turn 180 degrees as the camera is on the front, but
+        // the scoring position needs the back facing the board
+        double angleDegrees = Math.toDegrees(angleRadians);
+
+        return angleDegrees;
+    }
+    /**
+     * Move robot according to desired axes motions
+     * <p>
+     * Positive X is forward
+     * <p>
+     * Positive Yaw is counter-clockwise
+     */
+    public void moveRobot(double x, double yaw) {
+        // Calculate left and right wheel powers.
+        double leftPower    = x + yaw;
+        double rightPower   = x - yaw;
+
+        // Normalize wheel powers to be less than 1.0
+        double max = Math.max(Math.abs(leftPower), Math.abs(rightPower));
+        if (max > 1.0) {
+            leftPower /= max;
+            rightPower /= max;
+        }
+
+        // Send powers to the wheels.
+        leftDrive.setPower(leftPower);
+        rightDrive.setPower(rightPower);
+    }
+
+    protected void moveArmToIntakePosition() {
+        updateStatus("Arm intake starting");
+        armLeft.setTargetPosition(armIntakePosition);
+        armRight.setTargetPosition(armIntakePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristDownPosition);
+        updateStatus("Arm intake done");
+    }
+
+    protected void moveArmToScoringPosition() {
+        updateStatus("Scoring");
+        armLeft.setTargetPosition(armScorePosition);
+        armRight.setTargetPosition(armScorePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristUpPosition);
+        updateStatus("Scored");
+    }
+
+    protected void moveArmToHomePosition() {
+        updateStatus("Arm moving to home");
+        armLeft.setTargetPosition(armHomePosition);
+        armRight.setTargetPosition(armHomePosition);
+        armLeft.setPower(AUTO_ARM_GAIN);
+        armRight.setPower(AUTO_ARM_GAIN);
+        armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        wrist.setPosition(wristUpPosition);
+        updateStatus("Arm at home");
+    }
+
     /**
      * Initialize the AprilTag processor.
      */
@@ -363,7 +469,7 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected void score() {
         // Scoring
         if (opModeIsActive()) {
-            telemetry.addData("Status", "Scoring started");
+            updateStatus("Scoring started");
             moveArmToScoringPosition();
             updateStatus("Moved arm. Sleeping 4 s");
             sleep(4000);
@@ -372,7 +478,7 @@ public abstract class AbstractOpMode extends LinearOpMode
             sleep(3000);
             gripper.setPosition(gripperClosedPosition);
             moveArmToHomePosition();
-            updateStatus("Scored. Stopping in 2 s");
+            updateStatus("Scored. Stopping in 3 s");
             sleep(3000);
             //Watchdog to shut down motor once the arm reaches the home position
             if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
@@ -384,7 +490,70 @@ public abstract class AbstractOpMode extends LinearOpMode
                 armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
                 armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
-            stop();
+            // stop();
         }
+    }
+
+    protected void setAllianceParams() {
+        if (alliance != null) {
+            switch (alliance) {
+                case RED:
+                    // TODO - Detect actual spike mark tag
+                    minTargetTagId = TAG_RED_CENTER;
+                    maxTargetTagId = TAG_RED_CENTER;
+                    parkTurnDegrees = 30;
+                    parkDriveMm = 100;
+                    break;
+                case BLUE:
+                    // TODO - Detect actual spike mark tag
+                    minTargetTagId = TAG_BLUE_CENTER;
+                    maxTargetTagId = TAG_BLUE_CENTER;
+                    parkTurnDegrees = 30;
+                    parkDriveMm = 100;
+
+                    break;
+                default:
+                    updateStatus("Invalid Alliance");
+            }
+        }
+        else {
+            updateStatus("Invalid Alliance");
+        }
+    }
+
+    /**
+     * Calculate turn counts (ticks) given turn degrees
+     * @param turnDegrees
+     */
+    protected int getTurnCounts(double turnDegrees) {
+        double turnDistance = ROBOT_TRACK_WIDTH_MM * Math.PI * (turnDegrees / 360.0);
+        int turnCounts = (int)(turnDistance * COUNTS_PER_MM / 2); // Number of counts to turn turnDegrees degrees
+        return turnCounts;
+    }
+    
+    protected void park() {
+        // Park in an acceptable place
+        // Don't use encoders for both motors initially
+        leftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        rightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+        double turnDistance = ROBOT_TRACK_WIDTH_MM * Math.PI * (parkTurnDegrees / 360.0);
+        int turnCounts = getTurnCounts(parkTurnDegrees); // Number of counts to turn parkTurnDegrees degrees
+        leftDrive.setTargetPosition(turnCounts);
+        rightDrive.setTargetPosition(turnCounts);
+        leftDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        rightDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+
+        while (opModeIsActive() && (leftDrive.isBusy() && leftDrive.isBusy())){
+            sleep(100);
+        }
+
+        leftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        rightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        int driveCounts = (int)(parkDriveMm * COUNTS_PER_MM); // Number of counts to turn parkDriveMm mm
+        leftDrive.setTargetPosition(turnCounts);
+        rightDrive.setTargetPosition(turnCounts);
+        leftDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        rightDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
     }
 }

@@ -84,98 +84,16 @@ public class RedAutoOpMode extends AbstractOpMode
 {
     @Override public void runOpMode()
     {
-        boolean targetFound     = false;    // Set to true when an AprilTag target is detected
-        double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
-        double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
-        boolean movedToTarget   = false;
-
-        minTargetTagId = TAG_RED_CENTER;
-        maxTargetTagId = TAG_RED_CENTER;
+        alliance = Alliance.RED;
+        setAllianceParams();
 
         initDevices();
+        waitBeforeStart();
+        moveToTargetTag();
 
-        // Wait for the driver to press Start
-        telemetry.addData("Camera preview on/off", "3 dots, Camera Stream");
-        telemetry.addData(">", "Touch Play to start OpMode");
-        telemetry.update();
-        waitForStart();
-
-        int iteration = 0;
-        runtime.reset();
-        ArrayList<Double> rangeErrors = new ArrayList<Double>(); // Used to find if rangeError is constant across iterations, i.e. if robot has stopped.
-
-        while (opModeIsActive()) {
-            targetFound = false;
-            desiredTag = null;
-            // Initialize targetTag to unknown
-            // int targetTag = -1;
-            // Step through the list of detected tags and look for a matching tag
-            List<AprilTagDetection> currentDetections = aprilTag.getDetections();
-            for (AprilTagDetection detection : currentDetections) {
-                // Look to see if we have size info on this tag.
-                if (detection.metadata != null) {
-                    //  Check to see if we want to track towards this tag.
-                    if (detection.id >= minTargetTagId && detection.id <= maxTargetTagId) {
-                        // Yes, we want to use this tag.
-                        targetFound = true;
-                        desiredTag = detection;
-
-                        break;  // don't look any further.
-                    } else {
-                        // This tag is in the library, but we do not want to track it right now.
-                        telemetry.addData("Skipping", "Tag ID %d is not desired", detection.id);
-                    }
-                } else {
-                    // This tag is NOT in the library, so we don't have enough information to track to it.
-                    telemetry.addData("Unknown", "Tag ID %d is not in TagLibrary", detection.id);
-                }
-            }
-
-            // Tell the driver what we see, and what to do.
-            telemetry.addData("Iteration:Time", "%d:%.2f", ++iteration, runtime.time());
-
-            if (targetFound) {
-                telemetry.addData("Found", "ID %d (%s)", desiredTag.id, desiredTag.metadata.name);
-                telemetry.addData("Range", "%5.1f inches", desiredTag.ftcPose.range);
-                telemetry.addData("Bearing", "%3.0f degrees", desiredTag.ftcPose.bearing);
-                // Determine heading and range error so we can use them to control the robot automatically.
-                double rangeError = desiredTag.ftcPose.range - DESIRED_DISTANCE;
-                // Remember current range error for every 10 iterations
-                if (iteration % 10 == 0) {
-                    rangeErrors.add(rangeError);
-                }
-                telemetry.addData("Range Error", rangeError);
-                double headingError = desiredTag.ftcPose.bearing - bearingCorrection;
-                telemetry.addData("Bearing Error", headingError);
-
-                // Use the speed and turn "gains" to calculate how we want the robot to move.  Clip it to the maximum
-                drive = Range.clip(rangeError * AUTO_SPEED_GAIN, -MAX_AUTO_SPEED, MAX_AUTO_SPEED);
-                turn = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
-            }
-//            else if (!movedToTarget) {
-//                // Turn to try to find a acceptable target tag
-//                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
-//                sleep(20);
-//            }
-
-            telemetry.addData("Auto", "Drive %5.2f, Turn %5.2f", drive, turn);
-            telemetry.update();
-
-            // Apply desired axes motions to the drivetrain.
-            moveRobot(drive, turn);
-            sleep(10);
-
-            // Check if the range error is constant for a few iterations, before trying to score
-            int numRangeErrors = rangeErrors.size();
-            if (numRangeErrors > 50
-                    && rangeErrors.get(numRangeErrors - 1) - rangeErrors.get(numRangeErrors - 51) <= 0.001) {
-                updateStatus("Constant range error");
-                movedToTarget = true;
-                stopRobot();
-                break;
-            }
-        }
         // Scoring
         score();
+        // Stop
+        stop();
     }
 }
