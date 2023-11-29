@@ -95,14 +95,14 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected int maxTargetTagId;  // Max id of acceptable target tag
 
     // Adjust these numbers to suit your robot.
-    final double DESIRED_DISTANCE = 3.0; //  this is how close the camera should get to the target (inches)
+    final double DESIRED_DISTANCE = 2.0; //  this is how close the camera should get to the target (inches)
 
     //  Set the GAIN constants to control the relationship between the measured position error, and how much power is
     //  applied to the drive motors to correct the error.
     //  Drive = Error * Gain    Make these values smaller for smoother control, or larger for a more aggressive response.
     protected static final double AUTO_SPEED_GAIN =   0.02;   //  Speed Control "Gain". eg: 0.04 = Ramp up to 50% power at a 12.5 inch error.   (0.50 / 25.0)
     protected static final double AUTO_TURN_GAIN  =   0.01;   //  Turn Control "Gain".  eg: 0.01 = Ramp up to 25% power at a 25 degree error. (0.25 / 25.0)
-    protected static final double AUTO_ARM_GAIN = 0.8; // Arm movement "Gain"
+    protected static final double AUTO_ARM_GAIN = 0.7; // Arm movement "Gain"
 
     final double MAX_AUTO_SPEED = 0.5;   //  Clip the approach speed to this max value (adjust for your robot)
     final double MAX_AUTO_TURN  = 0.25;  //  Clip the turn speed to this max value (adjust for your robot)
@@ -173,6 +173,8 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected static final double TURN_DISTANCE = ROBOT_TRACK_WIDTH_MM * Math.PI * (DEGREES_TO_TURN / 360.0);
     protected static final int TURN_COUNTS = (int)(TURN_DISTANCE * COUNTS_PER_MM / 2); // Number of counts to turn DEGREES_TO_TURN degrees
 
+    protected static final int STOP_INTERVAL = 50; // Number of iterations for which range error should be constant, to determine that the robot has stopped.
+    protected static final double RANGE_ERROR_TOLERANCE = 0.001; // Range error will be considered constant if it's within this tolerance
     /**
      * Find bearing angle correction given X correction and range
      */
@@ -351,5 +353,38 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected void updateStatus(String status) {
         telemetry.addData("Status", status);
         telemetry.update();
+    }
+
+    protected void stopRobot() {
+        leftDrive.setPower(0.0);
+        rightDrive.setPower(0.0);
+    }
+
+    protected void score() {
+        // Scoring
+        if (opModeIsActive()) {
+            telemetry.addData("Status", "Scoring started");
+            moveArmToScoringPosition();
+            updateStatus("Moved arm. Sleeping 4 s");
+            sleep(4000);
+            gripper.setPosition(gripperOpenPosition);
+            updateStatus("Dropped pixel. Sleeping 3 s");
+            sleep(3000);
+            gripper.setPosition(gripperClosedPosition);
+            moveArmToHomePosition();
+            updateStatus("Scored. Stopping in 2 s");
+            sleep(3000);
+            //Watchdog to shut down motor once the arm reaches the home position
+            if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
+                    armLeft.getTargetPosition() <= armShutdownThreshold &&
+                    armLeft.getCurrentPosition() <= armShutdownThreshold
+            ) {
+                armLeft.setPower(0.0);
+                armRight.setPower(0.0);
+                armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+            stop();
+        }
     }
 }

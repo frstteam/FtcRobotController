@@ -29,10 +29,9 @@
 
 package org.firstinspires.ftc.teamcode;
 
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
@@ -79,26 +78,19 @@ import java.util.List;
  *
  */
 
-@TeleOp(name="Practice - Auto Op", group = "Iterative Opmode")
+@Autonomous(name="BLUE - Auto Op", group = "Iterative Opmode")
 
-public class PracticeAutoOpMode extends AbstractOpMode
+public class BlueAutoOpMode extends AbstractOpMode
 {
     @Override public void runOpMode()
     {
         boolean targetFound     = false;    // Set to true when an AprilTag target is detected
         double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
         double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
+        boolean movedToTarget   = false;
 
-        final String ALLIANCE = "BLUE";
-
-        if (ALLIANCE.equals("BLUE")) {
-            minTargetTagId = TAG_BLUE_LEFT;
-            maxTargetTagId = TAG_BLUE_RIGHT;
-        }
-        else {
-            minTargetTagId = TAG_RED_LEFT;
-            maxTargetTagId = TAG_RED_RIGHT;
-        }
+        minTargetTagId = TAG_BLUE_LEFT;
+        maxTargetTagId = TAG_BLUE_RIGHT;
 
         initDevices();
 
@@ -160,10 +152,11 @@ public class PracticeAutoOpMode extends AbstractOpMode
                 drive = Range.clip(rangeError * AUTO_SPEED_GAIN, -MAX_AUTO_SPEED, MAX_AUTO_SPEED);
                 turn = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
             }
-            else {
-                // Turn to try to find a acceptable target tag
-                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
-            }
+//            else if (!movedToTarget) {
+//                // Turn to try to find a acceptable target tag
+//                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
+//                sleep(20);
+//            }
 
             telemetry.addData("Auto", "Drive %5.2f, Turn %5.2f", drive, turn);
             telemetry.update();
@@ -174,38 +167,16 @@ public class PracticeAutoOpMode extends AbstractOpMode
 
             // Check if the range error is constant for a few iterations, before trying to score
             int numRangeErrors = rangeErrors.size();
-            if (numRangeErrors > 50
-                    && rangeErrors.get(numRangeErrors - 1) - rangeErrors.get(numRangeErrors - 51) <= 0.001) {
+            if (numRangeErrors > STOP_INTERVAL
+                    && rangeErrors.get(numRangeErrors - 1)
+                        - rangeErrors.get(numRangeErrors - (STOP_INTERVAL + 1)) <= RANGE_ERROR_TOLERANCE) {
                 updateStatus("Constant range error");
-                leftDrive.setPower(0.0);
-                rightDrive.setPower(0.0);
+                movedToTarget = true;
+                stopRobot();
                 break;
             }
         }
         // Scoring
-        if (opModeIsActive()) {
-            //Watchdog to shut down motor once the arm reaches the home position
-            if (armLeft.getMode() == DcMotor.RunMode.RUN_TO_POSITION &&
-                    armLeft.getTargetPosition() <= armShutdownThreshold &&
-                    armLeft.getCurrentPosition() <= armShutdownThreshold
-            ) {
-                armLeft.setPower(0.0);
-                armRight.setPower(0.0);
-                armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-
-            telemetry.addData("Status", "Scoring started");
-            moveArmToScoringPosition();
-            updateStatus("Moved arm. Sleeping 2 s");
-            sleep(2000);
-            gripper.setPosition(gripperOpenPosition);
-            updateStatus("Dropped pixel. Sleeping 3 s");
-            sleep(3000);
-            gripper.setPosition(gripperClosedPosition);
-            moveArmToHomePosition();
-            updateStatus("Scored. Stopping");
-            stop();
-        }
+        score();
     }
 }

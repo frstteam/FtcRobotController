@@ -57,7 +57,7 @@ public class TeleOpModeTwoGamepads extends OpMode
     private final double gripperClosedPosition = 1.0;
     private final double gripperOpenPosition = 0.5;
     private final double wristUpPosition = 1.0;
-    private final double wristDownPosition = 0.0;
+    private final double wristDownPosition = 0.15;
 
     private final int armHomePosition = 0;
     private final int armIntakePosition = 5;
