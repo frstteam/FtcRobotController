@@ -179,7 +179,10 @@ public abstract class AbstractOpMode extends LinearOpMode
     static final double RANGE_ERROR_TOLERANCE = 0.001; // Range error will be considered constant if it's within this tolerance
 
     protected double parkTurnDegrees; // Turn this much to park after scoring
+    protected double parkTurnMm; // Turn this much to park after scoring - value for leftDrive
+    protected double parkTurnTimeoutSec;
     protected double parkDriveMm; // Drive this much to park after scoring
+    protected double parkDriveTimeoutSec;
 
     /**
      * Initialize devices
@@ -500,17 +503,22 @@ public abstract class AbstractOpMode extends LinearOpMode
                 case RED:
                     // TODO - Detect actual spike mark tag
                     minTargetTagId = TAG_RED_CENTER;
-                    maxTargetTagId = TAG_RED_CENTER;
+                    maxTargetTagId = TAG_RED_RIGHT;
                     parkTurnDegrees = 30;
-                    parkDriveMm = 100;
+                    parkTurnMm = 100;
+                    parkDriveMm = -150;
+                    parkTurnTimeoutSec = 3.0;
+                    parkDriveTimeoutSec = 3.0;
                     break;
                 case BLUE:
                     // TODO - Detect actual spike mark tag
-                    minTargetTagId = TAG_BLUE_CENTER;
+                    minTargetTagId = TAG_BLUE_LEFT;
                     maxTargetTagId = TAG_BLUE_CENTER;
                     parkTurnDegrees = 30;
-                    parkDriveMm = 100;
-
+                    parkTurnMm = -100;
+                    parkDriveMm = -150;
+                    parkTurnTimeoutSec = 3.0;
+                    parkDriveTimeoutSec = 3.0;
                     break;
                 default:
                     updateStatus("Invalid Alliance");
@@ -530,30 +538,77 @@ public abstract class AbstractOpMode extends LinearOpMode
         int turnCounts = (int)(turnDistance * COUNTS_PER_MM / 2); // Number of counts to turn turnDegrees degrees
         return turnCounts;
     }
-    
-    protected void park() {
-        // Park in an acceptable place
-        // Don't use encoders for both motors initially
-        leftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        rightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
 
-        double turnDistance = ROBOT_TRACK_WIDTH_MM * Math.PI * (parkTurnDegrees / 360.0);
-        int turnCounts = getTurnCounts(parkTurnDegrees); // Number of counts to turn parkTurnDegrees degrees
-        leftDrive.setTargetPosition(turnCounts);
-        rightDrive.setTargetPosition(turnCounts);
-        leftDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        rightDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+    /*
+     *  Method to perform a relative move, based on encoder counts.
+     *  Encoders are not reset as the move is based on the current position.
+     *  Move will stop if any of three conditions occur:
+     *  1) Move gets to the desired position
+     *  2) Move runs out of time
+     *  3) Driver stops the OpMode running.
+     */
+    public void encoderDrive(double speed,
+                             double leftMm, double rightMm,
+                             double timeoutSec) {
+        int newLeftTarget;
+        int newRightTarget;
 
-        while (opModeIsActive() && (leftDrive.isBusy() && leftDrive.isBusy())){
-            sleep(100);
+        // Ensure that the OpMode is still active
+        if (opModeIsActive()) {
+
+            // Determine new target position, and pass to motor controller
+            newLeftTarget = leftDrive.getCurrentPosition() + (int)(leftMm * COUNTS_PER_MM);
+            newRightTarget = rightDrive.getCurrentPosition() + (int)(rightMm * COUNTS_PER_MM);
+            leftDrive.setTargetPosition(newLeftTarget);
+            rightDrive.setTargetPosition(newRightTarget);
+
+            // Turn On RUN_TO_POSITION
+            leftDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+            rightDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+
+            // reset the timeout time and start motion.
+            runtime.reset();
+            leftDrive.setPower(Math.abs(speed));
+            rightDrive.setPower(Math.abs(speed));
+
+            // keep looping while we are still active, and there is time left, and both motors are running.
+            // Note: We use (isBusy() && isBusy()) in the loop test, which means that when EITHER motor hits
+            // its target position, the motion will stop.  This is "safer" in the event that the robot will
+            // always end the motion as soon as possible.
+            // However, if you require that BOTH motors have finished their moves before the robot continues
+            // onto the next step, use (isBusy() || isBusy()) in the loop test.
+            while (opModeIsActive() &&
+                    (runtime.seconds() < timeoutSec) &&
+                    (leftDrive.isBusy() && rightDrive.isBusy())) {
+
+                // Display it for the driver.
+                telemetry.addData("Running to",  " %7d :%7d", newLeftTarget,  newRightTarget);
+                telemetry.addData("Currently at",  " at %7d :%7d",
+                        leftDrive.getCurrentPosition(), rightDrive.getCurrentPosition());
+                telemetry.update();
+            }
+
+            // Stop all motion;
+            leftDrive.setPower(0);
+            rightDrive.setPower(0);
+
+            // Turn off RUN_TO_POSITION
+            leftDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            rightDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+            sleep(250);   // optional pause after each move.
         }
+    }
 
-        leftDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        rightDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        int driveCounts = (int)(parkDriveMm * COUNTS_PER_MM); // Number of counts to turn parkDriveMm mm
-        leftDrive.setTargetPosition(turnCounts);
-        rightDrive.setTargetPosition(turnCounts);
-        leftDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        rightDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+    protected void park() {
+        updateStatus("Parking");
+        // Park in an acceptable place
+
+        // int turnCounts = getTurnCounts(parkTurnDegrees); // Number of counts to turn parkTurnDegrees degrees
+        // Step through each leg of the path,
+        // Note: Reverse movement is obtained by setting a negative distance (not speed)
+        encoderDrive(MAX_AUTO_TURN,   parkTurnMm, -parkTurnMm, parkTurnTimeoutSec);  // S2: Turn Right 10 cm with 3 Sec timeout
+        encoderDrive(MAX_AUTO_SPEED,  parkDriveMm,  parkDriveMm, parkDriveTimeoutSec);  // S1: Reverse 47 Inches with 3 Sec timeout
+        updateStatus("Parked");
     }
 }

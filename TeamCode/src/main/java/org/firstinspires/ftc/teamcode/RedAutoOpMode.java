@@ -91,8 +91,10 @@ public class RedAutoOpMode extends AbstractOpMode
         waitBeforeStart();
         moveToTargetTag();
 
-        // Scoring
+        // Score
         score();
+        // Park
+        park();
         // Stop
         stop();
     }
