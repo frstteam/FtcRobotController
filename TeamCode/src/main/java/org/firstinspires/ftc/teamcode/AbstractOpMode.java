@@ -29,6 +29,8 @@
 
 package org.firstinspires.ftc.teamcode;
 
+import android.util.Size;
+
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -41,9 +43,11 @@ import org.firstinspires.ftc.robotcore.external.hardware.camera.BuiltinCameraDir
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainControl;
+import org.firstinspires.ftc.robotcore.external.tfod.Recognition;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
+import org.firstinspires.ftc.vision.tfod.TfodProcessor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,14 +98,14 @@ public abstract class AbstractOpMode extends LinearOpMode
 {
     public enum Alliance {
         RED,
-        BLUE
+        BLUE,
     }
     protected Alliance alliance;
     protected int minTargetTagId;  // Min id of acceptable target tag
     protected int maxTargetTagId;  // Max id of acceptable target tag
 
     // Adjust these numbers to suit your robot.
-    final double DESIRED_DISTANCE = 2.0; //  this is how close the camera should get to the target (inches)
+    final double DESIRED_DISTANCE = 5.0; //  this is how close the camera should get to the target (inches)
 
     //  Set the GAIN constants to control the relationship between the measured position error, and how much power is
     //  applied to the drive motors to correct the error.
@@ -121,10 +125,6 @@ public abstract class AbstractOpMode extends LinearOpMode
     protected Servo gripper = null;
     protected Servo wrist = null;
 
-    protected double armSetpoint = 0.0;
-
-    protected final double armManualDeadband = 0.03;
-
     protected final double gripperClosedPosition = 1.0;
     protected final double gripperOpenPosition = 0.5;
     protected final double wristUpPosition = 1.0;
@@ -132,18 +132,45 @@ public abstract class AbstractOpMode extends LinearOpMode
 
     protected final int armHomePosition = 0;
     protected final int armIntakePosition = 10;
-    protected final int armScorePosition = 520;
+    protected final int armScorePosition = 580;
     protected final int armShutdownThreshold = 5;
 
     static final boolean USE_WEBCAM = true;  // Set true to use a webcam, or false for a phone camera
-    static final int DESIRED_TAG_ID = -1;    // Choose the tag you want to approach or set to -1 for ANY tag.
+    /**
+     * The variable to store our instance of the TensorFlow Object Detection processor.
+     */
+    protected TfodProcessor tfod;
+    // TFOD_MODEL_ASSET points to a model file stored in the project Asset location,
+    // this is only used for Android Studio when using models in Assets.
+    protected String tfodModelAsset = "CenterStage.tflite";
+    static final String[] LABELS = {
+        "Pixel",
+        "blue dog",
+        "red dog",
+    };
+    static final double FRAME_CENTER_X = 320.0;
+    static final double TARGET_OBJ_MAX_HEIGHT_MM = 100.0;
+    protected boolean targetObjectFound;
+    protected boolean targetTagFound;
+    protected double tfodTimeoutSec;
+    protected double tfodTurnMm; // Turn this much to align toward target object
+    protected double tfodTurnTimeoutSec;
+    protected double tfodDriveMm; // Drive this much to target object
+    protected double tfodDriveTimeoutSec;
+    protected double targetObjectX;
+    protected double targetObjectY;
+    protected double repositionTurnMm;
+    protected double repositionDriveMm;
+    /**
+     * The variable to store our instance of the vision portal.
+     */
     protected VisionPortal visionPortal;               // Used to manage the video source.
+
+    static final int DESIRED_TAG_ID = -1;    // Choose the tag you want to approach or set to -1 for ANY tag.
     protected AprilTagProcessor aprilTag;              // Used for managing the AprilTag detection process.
     protected AprilTagDetection desiredTag = null;     // Used to hold the data for a detected AprilTag
     boolean rangeWhenTagFound = false;               // Used to determine range from the starting point, when the desired tag is found
     double bearingCorrection = 0;                    // Used to determine additional turn angle to center the robot in front of the tag
-    static final double MANUAL_DRIVE_SPEED = 0.5;
-    static final double MANUAL_TURN_SPEED = 0.5;
 
     // Adjust Image Decimation to trade-off detection-range for detection-rate.
     // eg: Some typical detection data using a Logitech C920 WebCam
@@ -155,9 +182,7 @@ public abstract class AbstractOpMode extends LinearOpMode
     static final int TAG_IMAGE_DECIMATION_10_FT = 1;
     static final int TAG_IMAGE_DECIMATION_6_FT = 2;
     static final int TAG_IMAGE_DECIMATION_4_FT = 3;
-    static final String DEVICE_LEFT_DRIVE = "leftDrive";
-    static final String DEVICE_RIGHT_DRIVE = "rightDrive";
-    static final String DEVICE_CAMERA_1 = "Webcam 1";
+
     static final int TAG_BLUE_LEFT = 1;
     static final int TAG_BLUE_CENTER = 2;
     static final int TAG_BLUE_RIGHT = 3;
@@ -175,14 +200,73 @@ public abstract class AbstractOpMode extends LinearOpMode
     static final double COUNTS_PER_WHEEL_REV = COUNTS_PER_MOTOR_REV * DRIVE_GEAR_REDUCTION;
     static final double COUNTS_PER_MM = COUNTS_PER_WHEEL_REV / WHEEL_CIRCUMFERENCE_MM;
 
-    static final int STOP_INTERVAL = 50; // Number of iterations for which range error should be constant, to determine that the robot has stopped.
+    static final int STOP_INTERVAL = 30; // Number of iterations for which range error should be constant, to determine that the robot has stopped.
     static final double RANGE_ERROR_TOLERANCE = 0.001; // Range error will be considered constant if it's within this tolerance
+    protected double tagRepositionTurnMm; // Turn this much to align toward target object
+    protected double tagRepositionTurnTimeoutSec;
 
     protected double parkTurnDegrees; // Turn this much to park after scoring
     protected double parkTurnMm; // Turn this much to park after scoring - value for leftDrive
     protected double parkTurnTimeoutSec;
     protected double parkDriveMm; // Drive this much to park after scoring
     protected double parkDriveTimeoutSec;
+
+    /**
+     * Set alliance params
+     */
+    protected void setAllianceParams() {
+        if (alliance != null) {
+            switch (alliance) {
+                case RED:
+                    // TODO - Detect actual spike mark tag
+                    minTargetTagId = TAG_RED_LEFT;
+                    maxTargetTagId = TAG_RED_CENTER;
+                    parkTurnDegrees = 30;
+                    parkTurnMm = 140;
+                    parkDriveMm = -150;
+                    parkTurnTimeoutSec = 3.0;
+                    parkDriveTimeoutSec = 3.0;
+                    // Object detection params
+                    tfodModelAsset = "model_red.tflite";
+                    tfodTimeoutSec = 3.0;
+                    tfodTurnMm = -5;
+                    tfodTurnTimeoutSec = 0.5;
+                    tfodDriveMm = 100;
+                    tfodDriveTimeoutSec = 2.0;
+                    repositionTurnMm = -50;
+                    repositionDriveMm = -100;
+                    tagRepositionTurnMm = -30;
+                    tagRepositionTurnTimeoutSec = 2.0;
+                    break;
+                case BLUE:
+                    // TODO - Detect actual spike mark tag
+                    minTargetTagId = TAG_BLUE_CENTER;
+                    maxTargetTagId = TAG_BLUE_RIGHT;
+                    parkTurnDegrees = 30;
+                    parkTurnMm = -140;
+                    parkDriveMm = -150;
+                    parkTurnTimeoutSec = 3.0;
+                    parkDriveTimeoutSec = 3.0;
+                    // Object detection params
+                    tfodModelAsset = "model_blue.tflite";
+                    tfodTimeoutSec = 3.0;
+                    tfodTurnMm = -5;
+                    tfodTurnTimeoutSec = 0.5;
+                    tfodDriveMm = 100;
+                    tfodDriveTimeoutSec = 2.0;
+                    repositionTurnMm = -50;
+                    repositionDriveMm = -100;
+                    tagRepositionTurnMm = 30;
+                    tagRepositionTurnTimeoutSec = 2.0;
+                    break;
+                default:
+                    updateStatus("Invalid Alliance");
+            }
+        }
+        else {
+            updateStatus("Invalid Alliance");
+        }
+    }
 
     /**
      * Initialize devices
@@ -216,12 +300,14 @@ public abstract class AbstractOpMode extends LinearOpMode
         armLeft.setPower(0.0);
         armRight.setPower(0.0);
 
-        // Initialize the Apriltag Detection process
-        initAprilTag();
+        wrist.setPosition(wristUpPosition);
 
         // Don't use encoders for both motors initially
         leftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         rightDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+
+        // Initialize the Object & Apriltag Detection process
+        initVision();
 
         if (USE_WEBCAM)
             setManualExposure(6, 250);  // Use low exposure time to reduce motion blur
@@ -240,10 +326,108 @@ public abstract class AbstractOpMode extends LinearOpMode
     }
 
     /**
+     * Add telemetry about TensorFlow Object Detection (TFOD) recognitions.
+     */
+    protected void detectTargetObject() {
+
+        List<Recognition> currentRecognitions = tfod.getRecognitions();
+        telemetry.addData("# Objects Detected", currentRecognitions.size());
+
+        // Step through the list of recognitions and display info for each one.
+        for (Recognition recognition : currentRecognitions) {
+            targetObjectX = (recognition.getLeft() + recognition.getRight()) / 2 ;
+            targetObjectY = (recognition.getTop()  + recognition.getBottom()) / 2 ;
+
+            telemetry.addData(""," ");
+            telemetry.addData("Image", "%s (%.0f %% Conf.)", recognition.getLabel(), recognition.getConfidence() * 100);
+            telemetry.addData("- Position", "%.0f / %.0f", targetObjectX, targetObjectY);
+            telemetry.addData("- Size", "%.0f x %.0f", recognition.getWidth(), recognition.getHeight());
+
+            targetObjectFound = true;
+            break;
+        }   // end for() loop
+
+    }   // end method telemetryTfod()
+
+    /**
+     * Detect pixel / team prop and move toward it
+     */
+    protected void findTargetObject() {
+        int iteration = 0;
+        runtime.reset();
+        targetObjectFound = false;
+
+        // while (opModeIsActive() && (runtime.seconds() < tfodTimeoutSec)) {
+        while (opModeIsActive() && !targetObjectFound) {
+            detectTargetObject();
+
+            telemetry.addData("Iteration:Time", "%d:%.2f", ++iteration, runtime.time());
+
+            if (!targetObjectFound) {
+                encoderDrive(MAX_AUTO_TURN, tfodTurnMm, -tfodTurnMm, tfodTurnTimeoutSec);  // Turn Right tfodTurnMm with tfodTurnTimeoutSec timeout
+            }
+            sleep(20);
+        }
+    }
+
+    protected void moveToTargetObject() {
+        if (targetObjectFound) {
+            updateStatus("Moving toward target object");
+            double turnMm = ((targetObjectX - FRAME_CENTER_X) / FRAME_CENTER_X);
+            double driveMm = (1 - (targetObjectY / TARGET_OBJ_MAX_HEIGHT_MM)) * 100;
+            encoderDrive(MAX_AUTO_TURN, turnMm, -turnMm, tfodTurnTimeoutSec);  // Turn Right turnMm with tfodTurnTimeoutSec timeout
+            encoderDrive(MAX_AUTO_SPEED, driveMm,  driveMm, tfodDriveTimeoutSec);  // Reverse driveMm with tfodDriveTimeoutSec timeout
+            updateStatus("Moved toward target object");
+        }
+    }
+
+    protected void reposition() {
+        if (targetObjectFound) {
+            updateStatus("Repositioning");
+            encoderDrive(MAX_AUTO_SPEED, repositionDriveMm,  repositionDriveMm, tfodDriveTimeoutSec);  // Reverse repositionDriveMm with tfodDriveTimeoutSec timeout
+            encoderDrive(MAX_AUTO_TURN, repositionTurnMm, -repositionTurnMm, tfodTurnTimeoutSec);  // Turn Right repositionTurnMm with tfodTurnTimeoutSec timeout
+            updateStatus("Repositioned");
+        }
+    }
+
+    protected void tagReposition() {
+        updateStatus("Repositioning");
+        // encoderDrive(MAX_AUTO_SPEED, repositionDriveMm,  repositionDriveMm, tfodDriveTimeoutSec);  // Reverse repositionDriveMm with tfodDriveTimeoutSec timeout
+        encoderDrive(MAX_AUTO_TURN, tagRepositionTurnMm, -tagRepositionTurnMm, tagRepositionTurnTimeoutSec);  // Turn Right repositionTurnMm with tfodTurnTimeoutSec timeout
+        updateStatus("Repositioned");
+    }
+    /**
+     * Detect target tag
+     */
+    protected void detectAprilTags() {
+        // Initialize targetTag to unknown
+        // int targetTag = -1;
+        // Step through the list of detected tags and look for a matching tag
+        List<AprilTagDetection> currentDetections = aprilTag.getDetections();
+        for (AprilTagDetection detection : currentDetections) {
+            // Look to see if we have size info on this tag.
+            if (detection.metadata != null) {
+                //  Check to see if we want to track towards this tag.
+                if (detection.id >= minTargetTagId && detection.id <= maxTargetTagId) {
+                    // Yes, we want to use this tag.
+                    targetTagFound = true;
+                    desiredTag = detection;
+
+                    break;  // don't look any further.
+                } else {
+                    // This tag is in the library, but we do not want to track it right now.
+                    telemetry.addData("Skipping", "Tag ID %d is not desired", detection.id);
+                }
+            } else {
+                // This tag is NOT in the library, so we don't have enough information to track to it.
+                telemetry.addData("Unknown", "Tag ID %d is not in TagLibrary", detection.id);
+            }
+        }
+    }
+    /**
      * Detect target tag and move toward it
      */
     protected void moveToTargetTag() {
-        boolean targetFound     = false;    // Set to true when an AprilTag target is detected
         double  drive           = 0;        // Desired forward power/speed (-1 to +1) +ve is forward
         double  turn            = 0;        // Desired turning power/speed (-1 to +1) +ve is CounterClockwise
         boolean movedToTarget   = false;
@@ -253,36 +437,12 @@ public abstract class AbstractOpMode extends LinearOpMode
         ArrayList<Double> rangeErrors = new ArrayList<Double>(); // Used to find if rangeError is constant across iterations, i.e. if robot has stopped.
 
         while (opModeIsActive()) {
-            targetFound = false;
+            targetTagFound = false;
             desiredTag = null;
-            // Initialize targetTag to unknown
-            // int targetTag = -1;
-            // Step through the list of detected tags and look for a matching tag
-            List<AprilTagDetection> currentDetections = aprilTag.getDetections();
-            for (AprilTagDetection detection : currentDetections) {
-                // Look to see if we have size info on this tag.
-                if (detection.metadata != null) {
-                    //  Check to see if we want to track towards this tag.
-                    if (detection.id >= minTargetTagId && detection.id <= maxTargetTagId) {
-                        // Yes, we want to use this tag.
-                        targetFound = true;
-                        desiredTag = detection;
-
-                        break;  // don't look any further.
-                    } else {
-                        // This tag is in the library, but we do not want to track it right now.
-                        telemetry.addData("Skipping", "Tag ID %d is not desired", detection.id);
-                    }
-                } else {
-                    // This tag is NOT in the library, so we don't have enough information to track to it.
-                    telemetry.addData("Unknown", "Tag ID %d is not in TagLibrary", detection.id);
-                }
-            }
-
-            // Tell the driver what we see, and what to do.
+            detectAprilTags();
             telemetry.addData("Iteration:Time", "%d:%.2f", ++iteration, runtime.time());
 
-            if (targetFound) {
+            if (targetTagFound) {
                 telemetry.addData("Found", "ID %d (%s)", desiredTag.id, desiredTag.metadata.name);
                 telemetry.addData("Range", "%5.1f inches", desiredTag.ftcPose.range);
                 telemetry.addData("Bearing", "%3.0f degrees", desiredTag.ftcPose.bearing);
@@ -300,11 +460,6 @@ public abstract class AbstractOpMode extends LinearOpMode
                 drive = Range.clip(rangeError * AUTO_SPEED_GAIN, -MAX_AUTO_SPEED, MAX_AUTO_SPEED);
                 turn = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
             }
-//            else if (!movedToTarget) {
-//                // Turn to try to find a acceptable target tag
-//                turn = Range.clip(0.2, -MAX_AUTO_TURN, MAX_AUTO_TURN);
-//                sleep(20);
-//            }
 
             telemetry.addData("Auto", "Drive %5.2f, Turn %5.2f", drive, turn);
             telemetry.update();
@@ -319,7 +474,9 @@ public abstract class AbstractOpMode extends LinearOpMode
                     && rangeErrors.get(numRangeErrors - 1)
                     - rangeErrors.get(numRangeErrors - (STOP_INTERVAL + 1)) <= RANGE_ERROR_TOLERANCE) {
                 updateStatus("Constant range error");
-                stopRobot();
+                pauseRobot();
+                // Turn to face the tag
+                tagReposition();
                 movedToTarget = true;
                 break;
             }
@@ -397,26 +554,67 @@ public abstract class AbstractOpMode extends LinearOpMode
     }
 
     /**
+     * Initialize the TensorFlow Object Detection processor.
+     */
+    private void initTfod() {
+
+        // Create the TensorFlow processor by using a builder.
+        tfod = new TfodProcessor.Builder()
+
+                // With the following lines commented out, the default TfodProcessor Builder
+                // will load the default model for the season. To define a custom model to load,
+                // choose one of the following:
+                //   Use setModelAssetName() if the custom TF Model is built in as an asset (AS only).
+                //   Use setModelFileName() if you have downloaded a custom team model to the Robot Controller.
+                .setModelAssetName(tfodModelAsset)
+                //.setModelFileName(TFOD_MODEL_FILE)
+
+                // The following default settings are available to un-comment and edit as needed to
+                // set parameters for custom models.
+                .setModelLabels(LABELS)
+                //.setIsModelTensorFlow2(true)
+                //.setIsModelQuantized(true)
+                //.setModelInputSize(300)
+                //.setModelAspectRatio(16.0 / 9.0)
+
+                .build();
+
+    }   // end method initTfod()
+
+    /**
      * Initialize the AprilTag processor.
      */
-    protected void initAprilTag() {
+    protected void initVision() {
         // Create the AprilTag processor by using a builder.
         aprilTag = new AprilTagProcessor.Builder().build();
 
+        // Set decimation appropriate for distance
         aprilTag.setDecimation(TAG_IMAGE_DECIMATION_10_FT);
+
+        // Initialize Tensorflow Object Detection
+        initTfod();
 
         // Create the vision portal by using a builder.
         if (USE_WEBCAM) {
             visionPortal = new VisionPortal.Builder()
-                    .setCamera(hardwareMap.get(WebcamName.class, DEVICE_CAMERA_1))
+                    .setCamera(hardwareMap.get(WebcamName.class, "Webcam 1"))
                     .addProcessor(aprilTag)
+                    .addProcessor(tfod)
+                    .setCameraResolution(new Size(640, 480))
                     .build();
         } else {
             visionPortal = new VisionPortal.Builder()
                     .setCamera(BuiltinCameraDirection.BACK)
                     .addProcessor(aprilTag)
+                    .addProcessor(tfod)
                     .build();
         }
+        // Set confidence threshold for TFOD recognitions, at any time.
+        // tfod.setMinResultConfidence(0.75f);
+        // Indicate that only the zoomed center area of each
+        // image will be passed to the TensorFlow object
+        // detector. For no zooming, set magnification to 1.0.
+        // tfod.setZoom(2.0);
     }
 
     /*
@@ -464,9 +662,12 @@ public abstract class AbstractOpMode extends LinearOpMode
         telemetry.update();
     }
 
-    protected void stopRobot() {
+    protected void pauseRobot() {
         leftDrive.setPower(0.0);
         rightDrive.setPower(0.0);
+        // Save more CPU resources when camera is no longer needed.
+        // visionPortal.setProcessorEnabled(tfod, false);
+        visionPortal.close();
     }
 
     protected void score() {
@@ -474,8 +675,8 @@ public abstract class AbstractOpMode extends LinearOpMode
         if (opModeIsActive()) {
             updateStatus("Scoring started");
             moveArmToScoringPosition();
-            updateStatus("Moved arm. Sleeping 4 s");
-            sleep(4000);
+            updateStatus("Moved arm. Sleeping 3 s");
+            sleep(3000);
             gripper.setPosition(gripperOpenPosition);
             updateStatus("Dropped pixel. Sleeping 3 s");
             sleep(3000);
@@ -494,38 +695,6 @@ public abstract class AbstractOpMode extends LinearOpMode
                 armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
             // stop();
-        }
-    }
-
-    protected void setAllianceParams() {
-        if (alliance != null) {
-            switch (alliance) {
-                case RED:
-                    // TODO - Detect actual spike mark tag
-                    minTargetTagId = TAG_RED_CENTER;
-                    maxTargetTagId = TAG_RED_RIGHT;
-                    parkTurnDegrees = 30;
-                    parkTurnMm = 100;
-                    parkDriveMm = -150;
-                    parkTurnTimeoutSec = 3.0;
-                    parkDriveTimeoutSec = 3.0;
-                    break;
-                case BLUE:
-                    // TODO - Detect actual spike mark tag
-                    minTargetTagId = TAG_BLUE_LEFT;
-                    maxTargetTagId = TAG_BLUE_CENTER;
-                    parkTurnDegrees = 30;
-                    parkTurnMm = -100;
-                    parkDriveMm = -150;
-                    parkTurnTimeoutSec = 3.0;
-                    parkDriveTimeoutSec = 3.0;
-                    break;
-                default:
-                    updateStatus("Invalid Alliance");
-            }
-        }
-        else {
-            updateStatus("Invalid Alliance");
         }
     }
 
@@ -607,8 +776,9 @@ public abstract class AbstractOpMode extends LinearOpMode
         // int turnCounts = getTurnCounts(parkTurnDegrees); // Number of counts to turn parkTurnDegrees degrees
         // Step through each leg of the path,
         // Note: Reverse movement is obtained by setting a negative distance (not speed)
-        encoderDrive(MAX_AUTO_TURN,   parkTurnMm, -parkTurnMm, parkTurnTimeoutSec);  // S2: Turn Right 10 cm with 3 Sec timeout
-        encoderDrive(MAX_AUTO_SPEED,  parkDriveMm,  parkDriveMm, parkDriveTimeoutSec);  // S1: Reverse 47 Inches with 3 Sec timeout
+        encoderDrive(MAX_AUTO_TURN, parkTurnMm, -parkTurnMm, parkTurnTimeoutSec);  // Turn Right parkTurnMm with parkTurnTimeoutSec timeout
+        encoderDrive(MAX_AUTO_SPEED, parkDriveMm,  parkDriveMm, parkDriveTimeoutSec);  // Reverse parkDriveMm with parkDriveTimeoutSec timeout
+        moveArmToHomePosition();
         updateStatus("Parked");
     }
 }

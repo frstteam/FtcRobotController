@@ -48,6 +48,7 @@ public class TeleOpModeOneGamepad extends OpMode
     private DcMotor armRight = null;
     private Servo gripper = null;
     private Servo wrist = null;
+    private Servo launcher = null;
 
     private boolean manualMode = false;
     private double armSetpoint = 0.0;
@@ -58,10 +59,12 @@ public class TeleOpModeOneGamepad extends OpMode
     private final double gripperOpenPosition = 0.5;
     private final double wristUpPosition = 1.0;
     private final double wristDownPosition = 0.0;
+    private final double launcherHomePosition = 1.0;
+    private final double launcherScorePosition = 0.0;
 
     private final int armHomePosition = 0;
     private final int armIntakePosition = 3;
-    private final int armScorePosition = 520;
+    private final int armScorePosition = 580;
     private final int armShutdownThreshold = 5;
 
     private final double SPEED_GAIN = 0.7;
@@ -83,6 +86,7 @@ public class TeleOpModeOneGamepad extends OpMode
         armRight = hardwareMap.get(DcMotor.class, "armRight");
         gripper = hardwareMap.get(Servo.class, "gripper");
         wrist = hardwareMap.get(Servo.class, "wrist");
+        launcher = hardwareMap.get(Servo.class, "launcher");
 
         leftDrive.setDirection(DcMotor.Direction.FORWARD);
         rightDrive.setDirection(DcMotor.Direction.REVERSE);
@@ -99,6 +103,9 @@ public class TeleOpModeOneGamepad extends OpMode
         armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         armLeft.setPower(0.0);
         armRight.setPower(0.0);
+
+        wrist.setPosition(wristUpPosition);
+        launcher.setPosition(launcherHomePosition);
 
         telemetry.addData("Status", "Initialized");
     }
@@ -181,6 +188,7 @@ public class TeleOpModeOneGamepad extends OpMode
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristUpPosition);
+                launcher.setPosition(launcherHomePosition);
             }
             else if (gamepad1.b) {
                 telemetry.addData("Arm Position", "Intake");
@@ -201,6 +209,10 @@ public class TeleOpModeOneGamepad extends OpMode
                 armLeft.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 armRight.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 wrist.setPosition(wristUpPosition);
+            }
+            else if (gamepad1.back) {
+                telemetry.addData("Launcher Position", "Scoring");
+                launcher.setPosition(launcherScorePosition);
             }
         }
 
@@ -249,6 +261,7 @@ public class TeleOpModeOneGamepad extends OpMode
                         ", right = " +
                         ((Integer)armRight.getTargetPosition()).toString());
         telemetry.addData("Wrist Pos:", wrist.getPosition());
+        telemetry.addData("Launcher Pos:", launcher.getPosition());
 
         telemetry.addData("Status", "Run Time End: " + runtime.toString());
     }

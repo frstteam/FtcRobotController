@@ -197,12 +197,6 @@ public class AutoOpMode extends AbstractOpMode
                 turn  = Range.clip(headingError * AUTO_TURN_GAIN, -MAX_AUTO_TURN, MAX_AUTO_TURN);
 
                 telemetry.addData("Auto","Drive %5.2f, Turn %5.2f", drive, turn);
-            } else {
-                // drive using manual POV Joystick mode.
-                // Flip left stick y and right stick x values to match Auto mode X and Yaw
-                drive = MANUAL_DRIVE_SPEED * gamepad1.left_stick_y;  // Change drive rate by factor MANUAL_DRIVE_SPEED.
-                turn  = MANUAL_TURN_SPEED * gamepad1.right_stick_x;  // Change turn rate by factor MANUAL_TURN_SPEED.
-                telemetry.addData("Manual","Drive %5.2f, Turn %5.2f", drive, turn);
             }
             telemetry.update();
 

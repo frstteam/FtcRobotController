@@ -30,14 +30,6 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.util.Range;
-
-import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /*
  * This OpMode illustrates using a camera to locate and drive towards a specific AprilTag.
@@ -89,6 +81,7 @@ public class BlueAutoOpMode extends AbstractOpMode
 
         initDevices();
         waitBeforeStart();
+        // Detect a tag and move toward it
         moveToTargetTag();
 
         // Score
