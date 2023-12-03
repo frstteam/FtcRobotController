@@ -310,7 +310,7 @@ public abstract class AbstractOpMode extends LinearOpMode
         initVision();
 
         if (USE_WEBCAM)
-            setManualExposure(6, 250);  // Use low exposure time to reduce motion blur
+            setManualExposure(2, 250);  // Use low exposure time to reduce motion blur
 
         updateStatus("Initialized");
     }   /**

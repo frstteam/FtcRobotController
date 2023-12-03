@@ -268,6 +268,14 @@ public class TeleOpModeTwoGamepads extends OpMode
      */
     @Override
     public void stop() {
+//        armLeft.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+//        armRight.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        armLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        armRight.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        armLeft.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        armRight.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        armLeft.setPower(0.0);
+        armRight.setPower(0.0);
     }
 
 }
